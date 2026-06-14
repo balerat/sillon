@@ -1,5 +1,0 @@
-sqlmodel
-SQLAlchemy
-pytest
-h5py
-names_generator

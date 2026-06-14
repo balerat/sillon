@@ -1,5 +1,0 @@
-silloncommon
-toml
-h5py
-numpy
-names_generator
