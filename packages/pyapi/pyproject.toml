@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sillonpy"
+version = "0.0.1"
+authors = [
+  { name="Guillaume Tassoti", email="placeholder@email.com" },
+  { name="Baptiste Lerat", email="placeholder@email.com" }
+]
+description = "Python client implementation of the sillon utility."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "tqdm",
+  "numba",
+  "silloncommon",
+  "scipy",
+  "tomli_w",
+  "filelock",
+
+]
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/thesillonProject/sillon"
+Issues = "https://github.com/ThesillonProject/sillon/issues"

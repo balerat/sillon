@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "silloncore"
+version = "0.2.0"
+description = "The core engine for simply"
+authors = [
+  { name="Guillaume Tassotti", email="placeholder@email.com" },
+  { name="Baptiste Lerat", email="placeholder@email.com" }
+]
+dependencies = [
+  "silloncommon",
+  "toml",
+  "h5py",
+  "numpy",
+  "names_generator",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+[project.scripts]
+sillon-server-daemon = "silloncore.server.main:main"

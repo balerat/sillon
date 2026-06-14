@@ -1,0 +1,2 @@
+[console_scripts]
+sillon-server-daemon = silloncore.server.main:main

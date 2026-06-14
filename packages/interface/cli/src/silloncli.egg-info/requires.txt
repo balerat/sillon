@@ -1,0 +1,6 @@
+rich
+tabulate
+silloncommon
+silloncore
+tqdm
+pytest

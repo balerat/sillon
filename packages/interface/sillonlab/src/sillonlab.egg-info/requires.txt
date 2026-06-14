@@ -1,0 +1,9 @@
+rich
+tabulate
+silloncommon
+silloncore
+tqdm
+pytest
+toml
+numpy
+pandas

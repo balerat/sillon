@@ -1,0 +1,406 @@
+from sqlmodel import (
+    Field,
+    SQLModel,
+    select,
+    Session,
+    Relationship,
+    create_engine,
+    union_all,
+    text,
+)
+from sqlalchemy import Column
+from sqlalchemy.types import JSON
+from typing import Optional, Dict, Any, List
+# In the end the table definition of the database should be moved only to Common. It is here copy and pasted for it to work in the current branch
+
+
+def sims_to_db(simulations: dict, session):
+    """
+    Dump an entire sim_dict to the database.
+    """
+    saved_tables = []
+
+    for run_id, run in simulations.items():
+        clean_results = {}
+        # We create a list to hold all the artifacts for this specific run
+        run_artifacts: List[ArtifactTable] = []
+
+        for res_name, res_item in run.results.items():
+            if not res_item.is_artifact:
+                # CASE 1: It's just a value or a pointer (not a file)
+                clean_results[res_name] = res_item.value
+            else:
+                # CASE 2: IT IS AN ARTIFACT!
+                # We create the ArtifactTable row object
+                new_artifact = ArtifactTable(
+                    name=res_name,
+                    hash=res_item.hsh,
+                    path=res_item.value,
+                )
+                run_artifacts.append(new_artifact)
+
+        # Create the Simulation Database Row
+        table = SimulationTable(
+            uuid=run_id,
+            name=run.run_name,
+            date=run.date,
+            parameters=run.parameters,
+            results=clean_results,
+            meta_data=run.metadata,
+            tag=run.tags,
+            note=run.notes,
+            artifacts=run_artifacts,
+        )
+
+        session.add(table)
+        saved_tables.append(table)
+
+    # When we hit commit, SQLModel will:
+    # 1. Save the SimulationTable and get its new 'id'
+    # 2. Automatically assign that 'id' to the 'run_id' of every artifact in the list
+    # 3. Save all the ArtifactTables to the database.
+    session.commit()
+
+    return saved_tables
+
+
+def sim_to_db(run, session):
+    """
+    Dump a simulation item into the simply database.
+    """
+    clean_results = {}
+    # We create a list to hold all the artifacts for this specific run
+    run_artifacts: List[ArtifactTable] = []
+
+    for res_name, res_item in run.results.items():
+        if not res_item.is_artifact:
+            # CASE 1: It's just a value or a pointer (not a file)
+            clean_results[res_name] = res_item.value
+        else:
+            # CASE 2: IT IS AN ARTIFACT!
+            # We create the ArtifactTable row object
+            new_artifact = ArtifactTable(
+                name=res_name,
+                hash=res_item.hsh,
+                path=res_item.value,
+            )
+            run_artifacts.append(new_artifact)
+
+    # Create the Simulation Database Row
+    table = SimulationTable(
+        uuid=run.run_id,
+        name=run.run_name,
+        date=run.date,
+        parameters=run.parameters,
+        results=clean_results,
+        meta_data=run.metadata,
+        tag=run.tags,
+        note=run.notes,
+        artifacts=run_artifacts,
+    )
+
+    session.add(table)
+
+    # When we hit commit, SQLModel will:
+    # 1. Save the SimulationTable and get its new 'id'
+    # 2. Automatically assign that 'id' to the 'run_id' of every artifact in the list
+    # 3. Save all the ArtifactTables to the database.
+    session.commit()
+
+    return table
+
+
+def get_engine(project_path):
+    return create_engine("sqlite:///" + str(project_path / ".simply" / "database.sql"))
+
+
+class SimulationTable(SQLModel, table=True):
+    """
+    The table in the database for a simulation item. Name is Optional as we don't have to name each runs. This table is linked to the artifact table. Each runs has its own artefact table.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uuid: str
+    name: Optional[str]
+    date: Optional[str]
+    parameters: Dict[str, Any] = Field(default_factory={}, sa_column=Column(JSON))
+    results: Dict[str, Any] = Field(default_factory={}, sa_column=Column(JSON))
+    meta_data: Dict[str, Any] = Field(default_factory={}, sa_column=Column(JSON))
+    tag: Optional[List[Any]] = Field(default_factory=[], sa_column=Column(JSON))
+    note: Optional[List[Any]] = Field(default_factory=[], sa_column=Column(JSON))
+    artifacts: List["ArtifactTable"] = Relationship(back_populates="simulation")
+
+
+class ArtifactTable(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: Optional[str]
+    hash: str = Field(index=True)
+    path: str
+    run_id: Optional[int] = Field(default=None, foreign_key="simulationtable.id")
+    simulation: Optional[SimulationTable] = Relationship(back_populates="artifacts")
+
+
+### SELECTS ###
+def select_all(engine, run_id=None):
+    with Session(engine) as session:
+        # Start with the base query
+        query = select(SimulationTable)
+
+        # Only add the filter if a specific run_id was provided
+        if run_id is not None:
+            query = query.where(SimulationTable.uuid == run_id)
+
+        return session.exec(query).all()
+
+
+def select_param(engine, search_key=None):
+    with Session(engine) as session:
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    SimulationTable.uuid,
+                    text(f"'{key}'"),
+                    SimulationTable.parameters[key],
+                )
+                query = query.where(
+                    SimulationTable.parameters[key] != "null",
+                )
+                queries.append(query)
+            master_query = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query = select(SimulationTable.uuid, SimulationTable.parameters)
+            master_query = master_query.where(SimulationTable.parameters.is_not({}))
+
+        return session.exec(master_query).all()
+
+
+def select_metadata(engine, search_key=None):
+    with Session(engine) as session:
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    SimulationTable.uuid,
+                    text(f"'{key}'"),
+                    SimulationTable.meta_data[key],
+                )
+                query = query.where(
+                    SimulationTable.meta_data[key] != "null",
+                )
+                queries.append(query)
+            master_query = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query = select(SimulationTable.uuid, SimulationTable.meta_data)
+            master_query = master_query.where(SimulationTable.meta_data.is_not({}))
+
+        return session.exec(master_query).all()
+
+
+def select_result(engine, search_key=None):
+    with Session(engine) as session:
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    SimulationTable.uuid,
+                    text(f"'{key}'"),
+                    SimulationTable.results[key],
+                )
+                query = query.where(
+                    SimulationTable.results[key] != "null",
+                )
+                queries.append(query)
+            master_query = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query = select(SimulationTable.uuid, SimulationTable.results)
+            master_query = master_query.where(SimulationTable.results.is_not({}))
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    ArtifactTable.run_id,
+                    text(f"'{key}'"),
+                    ArtifactTable.path,
+                )
+                query = query.where(
+                    ArtifactTable.name == key,
+                )
+                queries.append(query)
+            master_query2 = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query2 = select(
+                ArtifactTable.run_id, ArtifactTable.name, ArtifactTable.path
+            )
+
+        return session.exec(master_query).all(), session.exec(master_query2).all()
+
+
+def select_all_user(engine, run_id=None):
+    with Session(engine) as session:
+        # Start with the base query
+        query = select(SimulationTable)
+
+        # Only add the filter if a specific run_id was provided
+        if run_id is not None:
+            query = query.where(SimulationTable.name == run_id)
+
+        return session.exec(query).all()
+
+
+def select_param_user(engine, search_key=None, search_id=None):
+    with Session(engine) as session:
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    SimulationTable.name,
+                    SimulationTable.date,
+                    text(f"'{key}'"),
+                    SimulationTable.parameters[key],
+                )
+                query = query.where(
+                    SimulationTable.parameters[key] != "null",
+                )
+                if search_id != []:
+                    query = query.where(SimulationTable.name.in_(search_id))
+                queries.append(query)
+            master_query = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query = select(
+                SimulationTable.name, SimulationTable.date, SimulationTable.parameters
+            )
+            master_query = master_query.where(SimulationTable.parameters.is_not({}))
+            if search_id != []:
+                master_query = master_query.where(SimulationTable.name.in_(search_id))
+
+        return session.exec(master_query).all()
+
+
+def select_metadata_user(engine, search_key=None, search_id=None):
+    with Session(engine) as session:
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    SimulationTable.name,
+                    SimulationTable.date,
+                    text(f"'{key}'"),
+                    SimulationTable.meta_data[key],
+                )
+                query = query.where(
+                    SimulationTable.meta_data[key] != "null",
+                )
+                if search_id != []:
+                    query = query.where(SimulationTable.name.in_(search_id))
+                queries.append(query)
+            master_query = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query = select(
+                SimulationTable.name, SimulationTable.date, SimulationTable.meta_data
+            )
+            master_query = master_query.where(SimulationTable.meta_data.is_not({}))
+            if search_id != []:
+                master_query = master_query.where(SimulationTable.name.in_(search_id))
+
+        return session.exec(master_query).all()
+
+
+def select_result_user(engine, search_key=None, search_id=[]):
+    with Session(engine) as session:
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    SimulationTable.name,
+                    SimulationTable.date,
+                    text(f"'{key}'"),
+                    SimulationTable.results[key],
+                )
+                query = query.where(
+                    SimulationTable.results[key] != "null",
+                )
+                if search_id != []:
+                    query = query.where(SimulationTable.name.in_(search_id))
+                queries.append(query)
+            master_query = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query = select(
+                SimulationTable.name, SimulationTable.date, SimulationTable.results
+            )
+            master_query = master_query.where(SimulationTable.results.is_not({}))
+            if search_id != []:
+                master_query = master_query.where(SimulationTable.name.in_(search_id))
+        if search_key is not None:
+            queries = []
+            for key in search_key:
+                # Extract ONLY the requested parameter
+                query = select(
+                    ArtifactTable.run_id,
+                    text(f"'{key}'"),
+                    ArtifactTable.path,
+                ).join(SimulationTable, ArtifactTable.run_id == SimulationTable.id)
+                query = query.where(
+                    ArtifactTable.name == key,
+                )
+                if search_id != []:
+                    query = query.where(SimulationTable.name.in_(search_id))
+                queries.append(query)
+            master_query2 = union_all(*queries)
+        else:
+            # Return the full parameters dictionary
+            master_query2 = select(
+                ArtifactTable.run_id, ArtifactTable.name, ArtifactTable.path
+            ).join(SimulationTable, ArtifactTable.run_id == SimulationTable.id)
+            if search_id != []:
+                master_query2 = master_query2.where(SimulationTable.name.in_(search_id))
+
+        return session.exec(master_query).all(), session.exec(master_query2).all()
+
+
+def select_param_all(engine):
+    with Session(engine) as session:
+        return session.exec(select(SimulationTable.parameters)).all()
+
+
+def select_result_all(engine):
+    with Session(engine) as session:
+        return session.exec(select(SimulationTable.results)).all()
+
+
+def select_metadata_all(engine):
+    with Session(engine) as session:
+        return session.exec(select(SimulationTable.meta_data)).all()
+
+
+def select_uuids(engine):
+    with Session(engine) as session:
+        return session.exec(select(SimulationTable.uuid)).all()
+
+
+### CHECKS ###
+def check_hashes_exists(input_hash, engine):
+    """
+    Returns the path and hash of a artifact if it already exists is the db to save space.
+    """
+    with Session(engine) as session:
+        statement = select(ArtifactTable).where(ArtifactTable.hash == input_hash)
+        results = session.exec(statement).first()
+        if results is None:
+            return results
+        else:
+            return results.path, results.hash

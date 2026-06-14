@@ -1,0 +1,405 @@
+2026-06-04 21:23:36 - INFO     - Server Starting...
+2026-06-04 21:23:36 - INFO     - Server registered successfully.
+2026-06-04 21:23:36 - INFO     - New event: First connection
+2026-06-04 21:23:36 - INFO     - New event: First connection
+2026-06-04 21:23:36 - INFO     - Command: register
+2026-06-04 21:23:36 - INFO     - REGISTERING A NEW SIMULATION WITH:
+2026-06-04 21:23:36 - INFO     - {'run_id': '55d84252-4acd-46cb-96ed-aebb45f2bb76', 'run_name': 'basic01', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/basic-01'}
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/basic-01/.sillon/glob/55d84252-4acd-46cb-96ed-aebb45f2bb76/glob.hdf5
+2026-06-04 21:23:36 - INFO     - Simulation object created
+2026-06-04 21:23:36 - INFO     - Project env handler created
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:python
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:/Users/doph/Code/sillon/examples/basic-01
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:import sys
+import inspect
+import os
+
+'''
+Here are all the function used for extracting metadata linked to python.
+'''
+
+def get_imports():
+    '''
+    This function will get all the imports used in a python script and sort them between user imports and system imports and also will differentiate
+    if an import is a library or a script made by the user.
+    '''
+    custom_modules = []
+    stdlib = sys.stdlib_module_names # Get all modules in the current script
+
+    for name, mod in sys.modules.items():
+        path = getattr(mod, "__file__", None)
+
+        if path == None:
+            continue
+        path = os.path.abspath(path)
+        if name in stdlib or"site-packages" in path or "dist-packages" in path: 
+            continue
+        if not os.path.isfile(path):
+            continue
+
+        custom_modules.append(path) # If the module is a users script add it to the custom module list
+
+    return sorted(set(custom_modules)), list(sys.modules.keys()) # Add also the lis of all imported modules
+
+def save_custom_sources(custom_modules):
+    '''
+    Get the source code of each user imports
+    '''
+    saved = {}
+    for path in custom_modules:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                saved[path] = f.read()
+        except(OSError, UnicodeDecodeError):
+            # Add something to the logging system for the future
+            continue
+    return saved
+
+def get_main_script():
+    '''
+    Get the location of the main script
+    '''
+    main_mod = sys.modules.get('__main__')
+    if main_mod and hasattr(main_mod, '__file__'):
+        return os.path.abspath(main_mod.__file__)
+    return None
+
+def load_main_script_source(script_path):
+    if script_path and os.path.exists(script_path):
+        with open(script_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "Source code not found."
+
+def get_user_script_path():
+    """
+    Walks up the call stack to find the first file that is NOT part of 
+    simplypy, simplycommon, or the standard library (like pytest).
+    """
+    for frame_info in inspect.stack():
+        filename = frame_info.filename
+        
+        # Skip your internal libraries
+        if "simplypy" in filename or "simplycommon" in filename:
+            continue
+            
+        # Skip pytest or built-in python runners
+        if "pytest" in filename or filename.startswith("<"):
+            continue
+            
+        # We found the first file that belongs to the user!
+        return os.path.abspath(filename)
+        
+    return None # Fallback if we can't find it
+
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:['/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_collections_abc.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_futures.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_subprocess.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_tasks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/constants.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/coroutines.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/exceptions.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/format_helpers.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/futures.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/locks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/log.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/mixins.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/protocols.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/queues.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/selector_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/sslproto.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/staggered.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/streams.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/subprocess.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/taskgroups.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/tasks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/threads.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/timeouts.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/transports.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/trsock.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/unix_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/__init__.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/thread.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ctypes/_endian.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/aliases.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/utf_8.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/utf_8_sig.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/_bootstrap.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/_bootstrap_external.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/machinery.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/scanner.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/posixpath.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_casefix.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_compiler.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_constants.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_parser.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/sqlite3/dbapi2.py', '/Users/doph/Code/sillon/examples/basic-01/basic.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/__init__.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/commands.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/rpcHandler.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/socket_path.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/__init__.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/api.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/daemon.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/metadata.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/serverCom.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/tracker.py']
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:['sys', 'builtins', '_frozen_importlib', '_imp', '_thread', '_warnings', '_weakref', '_io', 'marshal', 'posix', '_frozen_importlib_external', 'time', 'zipimport', '_codecs', 'codecs', 'encodings.aliases', 'encodings', 'encodings.utf_8', '_signal', '_abc', 'abc', 'io', '__main__', '_stat', 'stat', '_collections_abc', 'errno', 'genericpath', 'posixpath', 'os.path', 'os', '_sitebuiltins', 'encodings.utf_8_sig', 'site', 'collections.abc', 'itertools', 'keyword', '_operator', 'operator', 'reprlib', '_collections', 'collections', '_functools', 'functools', '_contextvars', 'contextvars', 'atexit', 'types', 'enum', '_sre', 're._constants', 're._parser', 're._casefix', 're._compiler', 'copyreg', 're', '_ast', 'contextlib', 'ast', '_opcode', '_opcode_metadata', 'opcode', 'dis', 'importlib._bootstrap', 'importlib._bootstrap_external', 'importlib', 'importlib.machinery', 'linecache', 'token', '_tokenize', 'tokenize', '_weakrefset', 'weakref', 'inspect', 'fnmatch', 'glob', 'pathlib._abc', 'ntpath', 'warnings', 'pwd', 'grp', 'pathlib._local', 'pathlib', '_typing', 'typing', '_uuid', 'uuid', '_lsprof', 'profile', 'cProfile', '_json', 'json.scanner', 'json.decoder', 'json.encoder', 'json', '_socket', 'math', 'select', 'selectors', 'array', 'socket', 'silloncommon', 'silloncommon.rpcHandler', 'silloncommon.commands', 'silloncommon.socket_path', '_locale', 'locale', 'signal', 'threading', 'fcntl', '_posixsubprocess', 'subprocess', '__future__', 'textwrap', '_colorize', 'traceback', '_string', 'string', 'logging', 'copy', 'dataclasses', 'filelock._error', 'filelock._api', 'concurrent', 'concurrent.futures._base', 'concurrent.futures', '_heapq', 'heapq', '_ssl', '_struct', 'struct', 'binascii', 'base64', 'ssl', 'asyncio.constants', 'asyncio.coroutines', 'asyncio.format_helpers', 'asyncio.base_futures', 'asyncio.exceptions', 'asyncio.base_tasks', '_asyncio', 'asyncio.events', 'asyncio.futures', 'asyncio.protocols', 'asyncio.transports', 'asyncio.log', 'asyncio.sslproto', 'asyncio.mixins', 'asyncio.locks', 'asyncio.queues', 'asyncio.timeouts', 'asyncio.tasks', 'asyncio.staggered', 'asyncio.trsock', 'asyncio.base_events', 'asyncio.runners', 'asyncio.streams', 'asyncio.subprocess', 'asyncio.taskgroups', 'asyncio.threads', 'asyncio.base_subprocess', 'asyncio.selector_events', 'asyncio.unix_events', 'asyncio', '_queue', 'queue', 'concurrent.futures.thread', '_datetime', 'datetime', '_sqlite3', 'sqlite3.dbapi2', 'sqlite3', 'filelock._read_write', 'filelock._async_read_write', 'filelock._util', 'filelock._soft', '_hashlib', '_blake2', 'hashlib', 'hmac', '_bisect', 'bisect', '_random', 'random', 'secrets', 'filelock._soft_rw._sync', 'filelock._soft_rw._async', 'filelock._soft_rw', 'filelock._unix', 'filelock._windows', 'filelock.asyncio', 'filelock.version', 'filelock', 'sillonpy.daemon', 'sillonpy.serverCom', 'sillonpy.metadata', 'sillonpy.tracker', 'sillonpy.api', 'sillonpy', 'numpy.version', 'numpy._expired_attrs_2_0', 'numpy._utils._convertions', 'numpy._utils', 'numpy._globals', 'numpy._distributor_init', 'numpy.exceptions', 'numpy._core._exceptions', 'numpy._core.printoptions', 'numpy.dtypes', 'numpy._core._multiarray_umath', 'numpy._utils._inspect', 'numpy._core.overrides', 'numpy._core.multiarray', 'numpy._core.umath', 'numbers', 'numpy._core._dtype', 'numpy._core._string_helpers', 'numpy._core._type_aliases', 'numpy._core.numerictypes', '_compat_pickle', '_pickle', 'pickle', 'numpy._core._methods', 'numpy._core.fromnumeric', 'numpy._core.shape_base', 'numpy._core._ufunc_config', 'numpy._core._asarray', 'numpy._core.arrayprint', 'numpy._core.numeric', 'numpy._core.einsumfunc', 'numpy._core.function_base', 'numpy._core.getlimits', 'numpy._core.memmap', 'numpy._core.records', 'numpy._core._add_newdocs', 'numpy._core._add_newdocs_scalars', 'numpy._core._dtype_ctypes', '_ctypes', 'ctypes._endian', 'ctypes', 'numpy._core._internal', 'numpy._pytesttester', 'numpy._core', 'numpy.__config__', 'numpy._typing._nbit_base', 'numpy._typing._nested_sequence', 'numpy._typing._shape', 'numpy._typing._array_like', 'numpy._typing._char_codes', 'numpy._typing._dtype_like', 'numpy._typing._nbit', 'numpy._typing._scalars', 'numpy._typing._ufunc', 'numpy._typing', 'numpy.lib._stride_tricks_impl', 'numpy.lib._twodim_base_impl', 'numpy.lib._array_utils_impl', 'numpy.lib.array_utils', 'numpy.linalg._umath_linalg', 'numpy.linalg._linalg', 'numpy.linalg', 'numpy.matrixlib.defmatrix', 'numpy.matrixlib', 'numpy.lib._histograms_impl', 'numpy.lib._function_base_impl', 'numpy.lib._index_tricks_impl', 'numpy.lib._arraypad_impl', 'numpy.lib._arraysetops_impl', 'numpy.lib._arrayterator_impl', 'numpy.lib._nanfunctions_impl', 'platform', 'numpy.lib._utils_impl', 'numpy.lib._format_impl', 'numpy.lib.format', 'numpy.lib._datasource', 'numpy.lib._iotools', 'numpy.lib._npyio_impl', 'numpy.lib._ufunclike_impl', 'numpy.lib._type_check_impl', 'numpy.lib._polynomial_impl', 'numpy.lib._shape_base_impl', 'numpy.lib._version', 'numpy.lib.introspect', 'numpy.lib.mixins', 'numpy.lib.npyio', 'numpy.lib._scimath_impl', 'numpy.lib.scimath', 'numpy.lib.stride_tricks', 'numpy.lib', 'numpy._array_api_info', 'numpy']
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:0.0027298927307128906
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:SUCCESS
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:profiling.txt
+2026-06-04 21:23:36 - INFO     - Command: add_metadata
+2026-06-04 21:23:36 - DEBUG    - Command value:{}
+2026-06-04 21:23:36 - INFO     - Command: dump
+2026-06-04 21:23:36 - DEBUG    - Command value:
+2026-06-04 21:23:36 - ERROR    - Error in the event loop
+2026-06-04 21:23:36 - ERROR    - name 'sillon_VERSION' is not defined
+2026-06-04 21:29:22 - INFO     - Server Starting...
+2026-06-04 21:29:22 - INFO     - Server registered successfully.
+2026-06-04 21:29:22 - INFO     - New event: First connection
+2026-06-04 21:29:22 - INFO     - New event: First connection
+2026-06-04 21:29:22 - INFO     - Idle timeout - shutting down.
+2026-06-04 21:30:13 - INFO     - Server Starting...
+2026-06-04 21:30:13 - INFO     - Server registered successfully.
+2026-06-04 21:30:13 - INFO     - New event: First connection
+2026-06-04 21:30:13 - INFO     - New event: First connection
+2026-06-04 21:30:13 - ERROR    - Error in the event loop
+2026-06-04 21:30:13 - ERROR    - 'NumpyEncoder' object has no attribute 'decode'
+2026-06-04 21:33:12 - INFO     - Server Starting...
+2026-06-04 21:33:12 - INFO     - Server registered successfully.
+2026-06-04 21:33:12 - INFO     - New event: First connection
+2026-06-04 21:33:12 - INFO     - New event: First connection
+2026-06-04 21:33:12 - INFO     - Command: register
+2026-06-04 21:33:12 - INFO     - REGISTERING A NEW SIMULATION WITH:
+2026-06-04 21:33:12 - INFO     - {'run_id': 'c4c2d593-87ed-4e1d-8617-bbba2a7474da', 'run_name': 'basic01', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/basic-01'}
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/basic-01/.sillon/glob/c4c2d593-87ed-4e1d-8617-bbba2a7474da/glob.hdf5
+2026-06-04 21:33:12 - INFO     - Simulation object created
+2026-06-04 21:33:12 - INFO     - Project env handler created
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:python
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:/Users/doph/Code/sillon/examples/basic-01
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:import sys
+import inspect
+import os
+
+'''
+Here are all the function used for extracting metadata linked to python.
+'''
+
+def get_imports():
+    '''
+    This function will get all the imports used in a python script and sort them between user imports and system imports and also will differentiate
+    if an import is a library or a script made by the user.
+    '''
+    custom_modules = []
+    stdlib = sys.stdlib_module_names # Get all modules in the current script
+
+    for name, mod in sys.modules.items():
+        path = getattr(mod, "__file__", None)
+
+        if path == None:
+            continue
+        path = os.path.abspath(path)
+        if name in stdlib or"site-packages" in path or "dist-packages" in path: 
+            continue
+        if not os.path.isfile(path):
+            continue
+
+        custom_modules.append(path) # If the module is a users script add it to the custom module list
+
+    return sorted(set(custom_modules)), list(sys.modules.keys()) # Add also the lis of all imported modules
+
+def save_custom_sources(custom_modules):
+    '''
+    Get the source code of each user imports
+    '''
+    saved = {}
+    for path in custom_modules:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                saved[path] = f.read()
+        except(OSError, UnicodeDecodeError):
+            # Add something to the logging system for the future
+            continue
+    return saved
+
+def get_main_script():
+    '''
+    Get the location of the main script
+    '''
+    main_mod = sys.modules.get('__main__')
+    if main_mod and hasattr(main_mod, '__file__'):
+        return os.path.abspath(main_mod.__file__)
+    return None
+
+def load_main_script_source(script_path):
+    if script_path and os.path.exists(script_path):
+        with open(script_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "Source code not found."
+
+def get_user_script_path():
+    """
+    Walks up the call stack to find the first file that is NOT part of 
+    simplypy, simplycommon, or the standard library (like pytest).
+    """
+    for frame_info in inspect.stack():
+        filename = frame_info.filename
+        
+        # Skip your internal libraries
+        if "simplypy" in filename or "simplycommon" in filename:
+            continue
+            
+        # Skip pytest or built-in python runners
+        if "pytest" in filename or filename.startswith("<"):
+            continue
+            
+        # We found the first file that belongs to the user!
+        return os.path.abspath(filename)
+        
+    return None # Fallback if we can't find it
+
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:['/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_collections_abc.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_futures.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_subprocess.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_tasks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/constants.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/coroutines.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/exceptions.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/format_helpers.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/futures.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/locks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/log.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/mixins.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/protocols.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/queues.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/selector_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/sslproto.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/staggered.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/streams.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/subprocess.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/taskgroups.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/tasks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/threads.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/timeouts.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/transports.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/trsock.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/unix_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/__init__.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/thread.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ctypes/_endian.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/aliases.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/utf_8.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/utf_8_sig.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/_bootstrap.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/_bootstrap_external.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/machinery.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/scanner.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/posixpath.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_casefix.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_compiler.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_constants.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_parser.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/sqlite3/dbapi2.py', '/Users/doph/Code/sillon/examples/basic-01/basic.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/__init__.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/commands.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/rpcHandler.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/socket_path.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/__init__.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/api.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/daemon.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/metadata.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/serverCom.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/tracker.py']
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:['sys', 'builtins', '_frozen_importlib', '_imp', '_thread', '_warnings', '_weakref', '_io', 'marshal', 'posix', '_frozen_importlib_external', 'time', 'zipimport', '_codecs', 'codecs', 'encodings.aliases', 'encodings', 'encodings.utf_8', '_signal', '_abc', 'abc', 'io', '__main__', '_stat', 'stat', '_collections_abc', 'errno', 'genericpath', 'posixpath', 'os.path', 'os', '_sitebuiltins', 'encodings.utf_8_sig', 'site', 'collections.abc', 'itertools', 'keyword', '_operator', 'operator', 'reprlib', '_collections', 'collections', '_functools', 'functools', '_contextvars', 'contextvars', 'atexit', 'types', 'enum', '_sre', 're._constants', 're._parser', 're._casefix', 're._compiler', 'copyreg', 're', '_ast', 'contextlib', 'ast', '_opcode', '_opcode_metadata', 'opcode', 'dis', 'importlib._bootstrap', 'importlib._bootstrap_external', 'importlib', 'importlib.machinery', 'linecache', 'token', '_tokenize', 'tokenize', '_weakrefset', 'weakref', 'inspect', 'fnmatch', 'glob', 'pathlib._abc', 'ntpath', 'warnings', 'pwd', 'grp', 'pathlib._local', 'pathlib', '_typing', 'typing', '_uuid', 'uuid', '_lsprof', 'profile', 'cProfile', '_json', 'json.scanner', 'json.decoder', 'json.encoder', 'json', '_socket', 'math', 'select', 'selectors', 'array', 'socket', 'silloncommon', 'numpy.version', 'numpy._expired_attrs_2_0', 'numpy._utils._convertions', 'numpy._utils', 'numpy._globals', 'numpy._distributor_init', '_datetime', 'datetime', 'numpy.exceptions', 'numpy._core._exceptions', 'numpy._core.printoptions', 'numpy.dtypes', 'numpy._core._multiarray_umath', 'numpy._utils._inspect', 'numpy._core.overrides', 'numpy._core.multiarray', 'numpy._core.umath', 'numbers', 'numpy._core._dtype', 'numpy._core._string_helpers', 'numpy._core._type_aliases', 'numpy._core.numerictypes', '_struct', 'struct', '_compat_pickle', '_pickle', 'pickle', 'numpy._core._methods', 'numpy._core.fromnumeric', 'numpy._core.shape_base', 'numpy._core._ufunc_config', 'numpy._core._asarray', 'numpy._core.arrayprint', 'numpy._core.numeric', 'numpy._core.einsumfunc', 'numpy._core.function_base', 'numpy._core.getlimits', 'numpy._core.memmap', 'numpy._core.records', 'textwrap', 'numpy._core._add_newdocs', 'numpy._core._add_newdocs_scalars', 'numpy._core._dtype_ctypes', '_ctypes', 'ctypes._endian', 'ctypes', 'numpy._core._internal', 'numpy._pytesttester', 'numpy._core', 'numpy.__config__', 'numpy._typing._nbit_base', 'numpy._typing._nested_sequence', 'numpy._typing._shape', 'numpy._typing._array_like', 'numpy._typing._char_codes', 'numpy._typing._dtype_like', 'numpy._typing._nbit', 'numpy._typing._scalars', 'numpy._typing._ufunc', 'numpy._typing', 'numpy.lib._stride_tricks_impl', 'numpy.lib._twodim_base_impl', 'numpy.lib._array_utils_impl', 'numpy.lib.array_utils', 'numpy.linalg._umath_linalg', 'numpy.linalg._linalg', 'numpy.linalg', 'numpy.matrixlib.defmatrix', 'numpy.matrixlib', 'numpy.lib._histograms_impl', 'numpy.lib._function_base_impl', 'numpy.lib._index_tricks_impl', 'numpy.lib._arraypad_impl', 'numpy.lib._arraysetops_impl', 'numpy.lib._arrayterator_impl', 'numpy.lib._nanfunctions_impl', 'platform', 'numpy.lib._utils_impl', 'numpy.lib._format_impl', 'numpy.lib.format', 'numpy.lib._datasource', 'numpy.lib._iotools', 'numpy.lib._npyio_impl', 'numpy.lib._ufunclike_impl', 'numpy.lib._type_check_impl', 'numpy.lib._polynomial_impl', 'numpy.lib._shape_base_impl', 'numpy.lib._version', 'numpy.lib.introspect', 'numpy.lib.mixins', 'numpy.lib.npyio', 'numpy.lib._scimath_impl', 'numpy.lib.scimath', 'numpy.lib.stride_tricks', 'numpy.lib', 'numpy._array_api_info', 'numpy', 'silloncommon.rpcHandler', 'silloncommon.commands', 'silloncommon.socket_path', '_locale', 'locale', 'signal', 'threading', 'fcntl', '_posixsubprocess', 'subprocess', '__future__', '_colorize', 'traceback', '_string', 'string', 'logging', 'copy', 'dataclasses', 'filelock._error', 'filelock._api', 'concurrent', 'concurrent.futures._base', 'concurrent.futures', '_heapq', 'heapq', '_ssl', 'binascii', 'base64', 'ssl', 'asyncio.constants', 'asyncio.coroutines', 'asyncio.format_helpers', 'asyncio.base_futures', 'asyncio.exceptions', 'asyncio.base_tasks', '_asyncio', 'asyncio.events', 'asyncio.futures', 'asyncio.protocols', 'asyncio.transports', 'asyncio.log', 'asyncio.sslproto', 'asyncio.mixins', 'asyncio.locks', 'asyncio.queues', 'asyncio.timeouts', 'asyncio.tasks', 'asyncio.staggered', 'asyncio.trsock', 'asyncio.base_events', 'asyncio.runners', 'asyncio.streams', 'asyncio.subprocess', 'asyncio.taskgroups', 'asyncio.threads', 'asyncio.base_subprocess', 'asyncio.selector_events', 'asyncio.unix_events', 'asyncio', '_queue', 'queue', 'concurrent.futures.thread', '_sqlite3', 'sqlite3.dbapi2', 'sqlite3', 'filelock._read_write', 'filelock._async_read_write', 'filelock._util', 'filelock._soft', '_hashlib', '_blake2', 'hashlib', 'hmac', '_bisect', 'bisect', '_random', 'random', 'secrets', 'filelock._soft_rw._sync', 'filelock._soft_rw._async', 'filelock._soft_rw', 'filelock._unix', 'filelock._windows', 'filelock.asyncio', 'filelock.version', 'filelock', 'sillonpy.daemon', 'sillonpy.serverCom', 'sillonpy.metadata', 'sillonpy.tracker', 'sillonpy.api', 'sillonpy']
+2026-06-04 21:33:12 - INFO     - Command: log_param
+2026-06-04 21:33:12 - DEBUG    - Command value:[1.0, 1.0909090909090908, 1.1818181818181819, 1.2727272727272727, 1.3636363636363638, 1.4545454545454546, 1.5454545454545454, 1.6363636363636362, 1.7272727272727273, 1.8181818181818183, 1.9090909090909092, 2.0, 2.090909090909091, 2.1818181818181817, 2.2727272727272725, 2.3636363636363638, 2.4545454545454546, 2.5454545454545454, 2.6363636363636367, 2.7272727272727275, 2.8181818181818183, 2.909090909090909, 3.0, 3.090909090909091, 3.1818181818181817, 3.272727272727273, 3.3636363636363638, 3.4545454545454546, 3.5454545454545454, 3.6363636363636362, 3.7272727272727275, 3.8181818181818183, 3.909090909090909, 4.0, 4.090909090909091, 4.181818181818182, 4.272727272727273, 4.363636363636363, 4.454545454545455, 4.545454545454545, 4.636363636363637, 4.7272727272727275, 4.818181818181818, 4.909090909090909, 5.0, 5.090909090909091, 5.181818181818182, 5.2727272727272725, 5.363636363636363, 5.454545454545455, 5.545454545454546, 5.636363636363637, 5.7272727272727275, 5.818181818181818, 5.909090909090909, 6.0, 6.090909090909091, 6.181818181818182, 6.2727272727272725, 6.363636363636364, 6.454545454545455, 6.545454545454546, 6.636363636363637, 6.7272727272727275, 6.818181818181818, 6.909090909090909, 7.0, 7.090909090909091, 7.181818181818182, 7.2727272727272725, 7.363636363636364, 7.454545454545455, 7.545454545454546, 7.636363636363637, 7.7272727272727275, 7.818181818181818, 7.909090909090909, 8.0, 8.09090909090909, 8.181818181818182, 8.272727272727273, 8.363636363636363, 8.454545454545455, 8.545454545454547, 8.636363636363637, 8.727272727272727, 8.818181818181818, 8.90909090909091, 9.0, 9.090909090909092, 9.181818181818182, 9.272727272727273, 9.363636363636363, 9.454545454545455, 9.545454545454545, 9.636363636363637, 9.727272727272727, 9.818181818181818, 9.90909090909091, 10.0]
+2026-06-04 21:33:12 - INFO     - Command: log_result
+2026-06-04 21:33:12 - DEBUG    - Command value:{'value': [1.3230000000000222, 322.99999999999983], 'path': None, 'save_result': True}
+2026-06-04 21:33:12 - INFO     - Command: add_note
+2026-06-04 21:33:12 - DEBUG    - Command value:Mhmm let's see if it worked
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:0.001094818115234375
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:SUCCESS
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:profiling.txt
+2026-06-04 21:33:12 - INFO     - Command: add_metadata
+2026-06-04 21:33:12 - DEBUG    - Command value:{}
+2026-06-04 21:33:12 - INFO     - Command: dump
+2026-06-04 21:33:12 - DEBUG    - Command value:
+2026-06-04 21:33:12 - ERROR    - Error in the event loop
+2026-06-04 21:33:12 - ERROR    - name 'sillon_VERSION' is not defined
+2026-06-04 21:34:18 - INFO     - Server Starting...
+2026-06-04 21:34:18 - INFO     - Server registered successfully.
+2026-06-04 21:34:18 - INFO     - New event: First connection
+2026-06-04 21:34:18 - INFO     - New event: First connection
+2026-06-04 21:34:18 - INFO     - Command: register
+2026-06-04 21:34:18 - INFO     - REGISTERING A NEW SIMULATION WITH:
+2026-06-04 21:34:18 - INFO     - {'run_id': '7d3f7926-191f-4c50-8489-d6b68ab91a78', 'run_name': 'basic01', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/basic-01'}
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/basic-01/.sillon/glob/7d3f7926-191f-4c50-8489-d6b68ab91a78/glob.hdf5
+2026-06-04 21:34:18 - INFO     - Simulation object created
+2026-06-04 21:34:18 - INFO     - Project env handler created
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:python
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:/Users/doph/Code/sillon/examples/basic-01
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:import sys
+import inspect
+import os
+
+'''
+Here are all the function used for extracting metadata linked to python.
+'''
+
+def get_imports():
+    '''
+    This function will get all the imports used in a python script and sort them between user imports and system imports and also will differentiate
+    if an import is a library or a script made by the user.
+    '''
+    custom_modules = []
+    stdlib = sys.stdlib_module_names # Get all modules in the current script
+
+    for name, mod in sys.modules.items():
+        path = getattr(mod, "__file__", None)
+
+        if path == None:
+            continue
+        path = os.path.abspath(path)
+        if name in stdlib or"site-packages" in path or "dist-packages" in path: 
+            continue
+        if not os.path.isfile(path):
+            continue
+
+        custom_modules.append(path) # If the module is a users script add it to the custom module list
+
+    return sorted(set(custom_modules)), list(sys.modules.keys()) # Add also the lis of all imported modules
+
+def save_custom_sources(custom_modules):
+    '''
+    Get the source code of each user imports
+    '''
+    saved = {}
+    for path in custom_modules:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                saved[path] = f.read()
+        except(OSError, UnicodeDecodeError):
+            # Add something to the logging system for the future
+            continue
+    return saved
+
+def get_main_script():
+    '''
+    Get the location of the main script
+    '''
+    main_mod = sys.modules.get('__main__')
+    if main_mod and hasattr(main_mod, '__file__'):
+        return os.path.abspath(main_mod.__file__)
+    return None
+
+def load_main_script_source(script_path):
+    if script_path and os.path.exists(script_path):
+        with open(script_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "Source code not found."
+
+def get_user_script_path():
+    """
+    Walks up the call stack to find the first file that is NOT part of 
+    simplypy, simplycommon, or the standard library (like pytest).
+    """
+    for frame_info in inspect.stack():
+        filename = frame_info.filename
+        
+        # Skip your internal libraries
+        if "simplypy" in filename or "simplycommon" in filename:
+            continue
+            
+        # Skip pytest or built-in python runners
+        if "pytest" in filename or filename.startswith("<"):
+            continue
+            
+        # We found the first file that belongs to the user!
+        return os.path.abspath(filename)
+        
+    return None # Fallback if we can't find it
+
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:['/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/_collections_abc.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_futures.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_subprocess.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_tasks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/constants.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/coroutines.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/exceptions.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/format_helpers.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/futures.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/locks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/log.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/mixins.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/protocols.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/queues.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/selector_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/sslproto.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/staggered.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/streams.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/subprocess.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/taskgroups.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/tasks.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/threads.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/timeouts.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/transports.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/trsock.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/unix_events.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/__init__.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/thread.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ctypes/_endian.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/aliases.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/utf_8.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/encodings/utf_8_sig.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/_bootstrap.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/_bootstrap_external.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/machinery.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/encoder.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/scanner.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/posixpath.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_casefix.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_compiler.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_constants.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/re/_parser.py', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/sqlite3/dbapi2.py', '/Users/doph/Code/sillon/examples/basic-01/basic.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/__init__.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/commands.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/rpcHandler.py', '/Users/doph/Code/sillon/packages/common/src/silloncommon/socket_path.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/__init__.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/api.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/daemon.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/metadata.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/serverCom.py', '/Users/doph/Code/sillon/packages/pyapi/src/sillonpy/tracker.py']
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:['sys', 'builtins', '_frozen_importlib', '_imp', '_thread', '_warnings', '_weakref', '_io', 'marshal', 'posix', '_frozen_importlib_external', 'time', 'zipimport', '_codecs', 'codecs', 'encodings.aliases', 'encodings', 'encodings.utf_8', '_signal', '_abc', 'abc', 'io', '__main__', '_stat', 'stat', '_collections_abc', 'errno', 'genericpath', 'posixpath', 'os.path', 'os', '_sitebuiltins', 'encodings.utf_8_sig', 'site', 'collections.abc', 'itertools', 'keyword', '_operator', 'operator', 'reprlib', '_collections', 'collections', '_functools', 'functools', '_contextvars', 'contextvars', 'atexit', 'types', 'enum', '_sre', 're._constants', 're._parser', 're._casefix', 're._compiler', 'copyreg', 're', '_ast', 'contextlib', 'ast', '_opcode', '_opcode_metadata', 'opcode', 'dis', 'importlib._bootstrap', 'importlib._bootstrap_external', 'importlib', 'importlib.machinery', 'linecache', 'token', '_tokenize', 'tokenize', '_weakrefset', 'weakref', 'inspect', 'fnmatch', 'glob', 'pathlib._abc', 'ntpath', 'warnings', 'pwd', 'grp', 'pathlib._local', 'pathlib', '_typing', 'typing', '_uuid', 'uuid', '_lsprof', 'profile', 'cProfile', '_json', 'json.scanner', 'json.decoder', 'json.encoder', 'json', '_socket', 'math', 'select', 'selectors', 'array', 'socket', 'silloncommon', 'numpy.version', 'numpy._expired_attrs_2_0', 'numpy._utils._convertions', 'numpy._utils', 'numpy._globals', 'numpy._distributor_init', '_datetime', 'datetime', 'numpy.exceptions', 'numpy._core._exceptions', 'numpy._core.printoptions', 'numpy.dtypes', 'numpy._core._multiarray_umath', 'numpy._utils._inspect', 'numpy._core.overrides', 'numpy._core.multiarray', 'numpy._core.umath', 'numbers', 'numpy._core._dtype', 'numpy._core._string_helpers', 'numpy._core._type_aliases', 'numpy._core.numerictypes', '_struct', 'struct', '_compat_pickle', '_pickle', 'pickle', 'numpy._core._methods', 'numpy._core.fromnumeric', 'numpy._core.shape_base', 'numpy._core._ufunc_config', 'numpy._core._asarray', 'numpy._core.arrayprint', 'numpy._core.numeric', 'numpy._core.einsumfunc', 'numpy._core.function_base', 'numpy._core.getlimits', 'numpy._core.memmap', 'numpy._core.records', 'textwrap', 'numpy._core._add_newdocs', 'numpy._core._add_newdocs_scalars', 'numpy._core._dtype_ctypes', '_ctypes', 'ctypes._endian', 'ctypes', 'numpy._core._internal', 'numpy._pytesttester', 'numpy._core', 'numpy.__config__', 'numpy._typing._nbit_base', 'numpy._typing._nested_sequence', 'numpy._typing._shape', 'numpy._typing._array_like', 'numpy._typing._char_codes', 'numpy._typing._dtype_like', 'numpy._typing._nbit', 'numpy._typing._scalars', 'numpy._typing._ufunc', 'numpy._typing', 'numpy.lib._stride_tricks_impl', 'numpy.lib._twodim_base_impl', 'numpy.lib._array_utils_impl', 'numpy.lib.array_utils', 'numpy.linalg._umath_linalg', 'numpy.linalg._linalg', 'numpy.linalg', 'numpy.matrixlib.defmatrix', 'numpy.matrixlib', 'numpy.lib._histograms_impl', 'numpy.lib._function_base_impl', 'numpy.lib._index_tricks_impl', 'numpy.lib._arraypad_impl', 'numpy.lib._arraysetops_impl', 'numpy.lib._arrayterator_impl', 'numpy.lib._nanfunctions_impl', 'platform', 'numpy.lib._utils_impl', 'numpy.lib._format_impl', 'numpy.lib.format', 'numpy.lib._datasource', 'numpy.lib._iotools', 'numpy.lib._npyio_impl', 'numpy.lib._ufunclike_impl', 'numpy.lib._type_check_impl', 'numpy.lib._polynomial_impl', 'numpy.lib._shape_base_impl', 'numpy.lib._version', 'numpy.lib.introspect', 'numpy.lib.mixins', 'numpy.lib.npyio', 'numpy.lib._scimath_impl', 'numpy.lib.scimath', 'numpy.lib.stride_tricks', 'numpy.lib', 'numpy._array_api_info', 'numpy', 'silloncommon.rpcHandler', 'silloncommon.commands', 'silloncommon.socket_path', '_locale', 'locale', 'signal', 'threading', 'fcntl', '_posixsubprocess', 'subprocess', '__future__', '_colorize', 'traceback', '_string', 'string', 'logging', 'copy', 'dataclasses', 'filelock._error', 'filelock._api', 'concurrent', 'concurrent.futures._base', 'concurrent.futures', '_heapq', 'heapq', '_ssl', 'binascii', 'base64', 'ssl', 'asyncio.constants', 'asyncio.coroutines', 'asyncio.format_helpers', 'asyncio.base_futures', 'asyncio.exceptions', 'asyncio.base_tasks', '_asyncio', 'asyncio.events', 'asyncio.futures', 'asyncio.protocols', 'asyncio.transports', 'asyncio.log', 'asyncio.sslproto', 'asyncio.mixins', 'asyncio.locks', 'asyncio.queues', 'asyncio.timeouts', 'asyncio.tasks', 'asyncio.staggered', 'asyncio.trsock', 'asyncio.base_events', 'asyncio.runners', 'asyncio.streams', 'asyncio.subprocess', 'asyncio.taskgroups', 'asyncio.threads', 'asyncio.base_subprocess', 'asyncio.selector_events', 'asyncio.unix_events', 'asyncio', '_queue', 'queue', 'concurrent.futures.thread', '_sqlite3', 'sqlite3.dbapi2', 'sqlite3', 'filelock._read_write', 'filelock._async_read_write', 'filelock._util', 'filelock._soft', '_hashlib', '_blake2', 'hashlib', 'hmac', '_bisect', 'bisect', '_random', 'random', 'secrets', 'filelock._soft_rw._sync', 'filelock._soft_rw._async', 'filelock._soft_rw', 'filelock._unix', 'filelock._windows', 'filelock.asyncio', 'filelock.version', 'filelock', 'sillonpy.daemon', 'sillonpy.serverCom', 'sillonpy.metadata', 'sillonpy.tracker', 'sillonpy.api', 'sillonpy']
+2026-06-04 21:34:18 - INFO     - Command: log_param
+2026-06-04 21:34:18 - DEBUG    - Command value:[1.0, 1.0909090909090908, 1.1818181818181819, 1.2727272727272727, 1.3636363636363638, 1.4545454545454546, 1.5454545454545454, 1.6363636363636362, 1.7272727272727273, 1.8181818181818183, 1.9090909090909092, 2.0, 2.090909090909091, 2.1818181818181817, 2.2727272727272725, 2.3636363636363638, 2.4545454545454546, 2.5454545454545454, 2.6363636363636367, 2.7272727272727275, 2.8181818181818183, 2.909090909090909, 3.0, 3.090909090909091, 3.1818181818181817, 3.272727272727273, 3.3636363636363638, 3.4545454545454546, 3.5454545454545454, 3.6363636363636362, 3.7272727272727275, 3.8181818181818183, 3.909090909090909, 4.0, 4.090909090909091, 4.181818181818182, 4.272727272727273, 4.363636363636363, 4.454545454545455, 4.545454545454545, 4.636363636363637, 4.7272727272727275, 4.818181818181818, 4.909090909090909, 5.0, 5.090909090909091, 5.181818181818182, 5.2727272727272725, 5.363636363636363, 5.454545454545455, 5.545454545454546, 5.636363636363637, 5.7272727272727275, 5.818181818181818, 5.909090909090909, 6.0, 6.090909090909091, 6.181818181818182, 6.2727272727272725, 6.363636363636364, 6.454545454545455, 6.545454545454546, 6.636363636363637, 6.7272727272727275, 6.818181818181818, 6.909090909090909, 7.0, 7.090909090909091, 7.181818181818182, 7.2727272727272725, 7.363636363636364, 7.454545454545455, 7.545454545454546, 7.636363636363637, 7.7272727272727275, 7.818181818181818, 7.909090909090909, 8.0, 8.09090909090909, 8.181818181818182, 8.272727272727273, 8.363636363636363, 8.454545454545455, 8.545454545454547, 8.636363636363637, 8.727272727272727, 8.818181818181818, 8.90909090909091, 9.0, 9.090909090909092, 9.181818181818182, 9.272727272727273, 9.363636363636363, 9.454545454545455, 9.545454545454545, 9.636363636363637, 9.727272727272727, 9.818181818181818, 9.90909090909091, 10.0]
+2026-06-04 21:34:18 - INFO     - Command: log_result
+2026-06-04 21:34:18 - DEBUG    - Command value:{'value': [1.3230000000000222, 322.99999999999983], 'path': None, 'save_result': True}
+2026-06-04 21:34:18 - INFO     - Command: add_note
+2026-06-04 21:34:18 - DEBUG    - Command value:Mhmm let's see if it worked
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:0.0011267662048339844
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:SUCCESS
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:profiling.txt
+2026-06-04 21:34:18 - INFO     - Command: add_metadata
+2026-06-04 21:34:18 - DEBUG    - Command value:{}
+2026-06-04 21:34:18 - INFO     - Command: dump
+2026-06-04 21:34:18 - DEBUG    - Command value:
+2026-06-04 21:34:18 - INFO     - Idle timeout - shutting down.
+2026-06-06 18:16:57 - INFO     - Server Starting...
+2026-06-06 18:16:57 - INFO     - Server registered successfully.
+2026-06-06 18:16:57 - ERROR    - Error in the event loop
+2026-06-06 18:16:57 - ERROR    - Server._handle_client_disconnect() missing 1 required positional argument: 'data'
+2026-06-06 18:20:16 - INFO     - Server Starting...
+2026-06-06 18:20:16 - INFO     - Server registered successfully.
+2026-06-06 18:20:16 - INFO     - Idle timeout - shutting down.
+2026-06-06 18:25:43 - INFO     - Server Starting...
+2026-06-06 18:25:43 - INFO     - Server registered successfully.
+2026-06-06 18:25:43 - INFO     - Registering new simulation: {'run_id': 'b55fc393-9ef8-42d8-a0dd-8e8c3c0c3a26', 'run_name': 'basic01', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/basic-01'}
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/basic-01/.sillon/glob/b55fc393-9ef8-42d8-a0dd-8e8c3c0c3a26/glob.hdf5
+2026-06-06 18:25:43 - INFO     - Simulation and env handler created
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: log_param
+2026-06-06 18:25:43 - INFO     - Command: log_result
+2026-06-06 18:25:43 - INFO     - Command: add_note
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: add_metadata
+2026-06-06 18:25:43 - INFO     - Command: dump
+2026-06-06 18:26:04 - INFO     - Registering new simulation: {'run_id': 'efdea68e-6009-4a8e-b0ab-1bb73afff8f9', 'run_name': 'basic01', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/basic-01'}
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/basic-01/.sillon/glob/efdea68e-6009-4a8e-b0ab-1bb73afff8f9/glob.hdf5
+2026-06-06 18:26:04 - INFO     - Simulation and env handler created
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: log_param
+2026-06-06 18:26:04 - INFO     - Command: log_result
+2026-06-06 18:26:04 - INFO     - Command: add_note
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: add_metadata
+2026-06-06 18:26:04 - INFO     - Command: dump
+2026-06-06 18:31:04 - INFO     - Idle timeout - shutting down.

@@ -1,0 +1,52 @@
+[Environment]
+result_dir = 'qgm_fitting_res'
+seed = 42
+
+[Data]
+roi_bg = [827, 1006, 597, 764]
+roi_main = [390, 775, 296, 712]
+n_shots =1
+n_runs = 5
+n_hist = 20
+filter_in = [0.3, 0, 0]
+filter_post = [0, 0, 0]
+
+[Fitting]
+bound_k0 = [0.35, 0.39]
+bound_theta = [1.5, 1.55]
+n_bins_rms = 10
+fit_population = 10
+mode = 'combined'
+lamb = 0
+# Other modes are 'min_energy', 'min_outside_oct', 'combined
+
+[Octagon]
+population_cutoff = 0
+search_size = 8
+pixel_width = 3
+cloud_center = [190, 215]
+cloud_size = [0, 100]
+background_center = [70, 70]
+cloud_size_background = 70
+
+[Switch]
+population_mode = 'pixelwise'
+
+[Debug]
+verbose = 0
+profiling = 0
+Note = '0 fixed rms'
+# Data dir: directory of the hdf5 files to analyze
+# Res dir: directory to save the results
+# Rois: region of interest for the background and the main image
+# n_row, n_col: number of rows and columns of the images
+# n_row is for the number of shots per lattice depth and n_col is for the number of lattice depths
+# n_hist: number of bins for the histogram
+# bound_ : bound for the fitting for magnification, phases and reation angle
+# fine_recheck_cst: constant to recheck the fit between two pops
+# verbose: print the progress of the analysis
+# population_cutoff: cutoff for the population in the histogram
+# search_size: size of the search for the octogon potential minimum
+# potential_img_cutoff: cutoff for the potential image to reduce the number of minimum taken into account
+# population_pixel_width: width of the pixel for the population calculation
+# cloud_size: [inner, outer] width

@@ -1,0 +1,5 @@
+[Environment]
+project_id = "67581dda-360e-4d36-ba48-2d6128ca2725"
+
+[storage]
+storage_root = "/Users/doph/Code/sillon/examples/sillonlab/.sillon"

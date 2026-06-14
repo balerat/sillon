@@ -1,0 +1,8 @@
+numpy
+matplotlib
+tqdm
+numba
+silloncommon
+scipy
+tomli_w
+filelock

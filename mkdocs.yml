@@ -1,0 +1,16 @@
+site_name: Sillon Documentation
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: 
+            - /packages/common/src/
+            - /packages/core/src/
+            - /packages/pyapi/src/
+            - /packages/interface/cli/src/
+          options:
+            docstring_style: google

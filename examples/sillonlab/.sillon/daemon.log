@@ -1,0 +1,38 @@
+2026-06-12 21:07:06 - INFO     - Server Starting...
+2026-06-12 21:07:06 - INFO     - Server registered successfully.
+2026-06-12 21:07:06 - INFO     - Registering new simulation: {'run_id': '66c93c93-ca3e-4db0-a70f-bd88bc765602', 'run_name': 'sillonlab', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/sillonlab'}
+creating config at  /Users/doph/Code/sillon/examples/sillonlab/.sillon/config.toml
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/sillonlab/.sillon/glob/66c93c93-ca3e-4db0-a70f-bd88bc765602/glob.hdf5
+2026-06-12 21:07:06 - INFO     - Simulation and env handler created
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: log_param
+2026-06-12 21:07:06 - INFO     - Command: log_param
+2026-06-12 21:07:06 - INFO     - Command: add_note
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: add_metadata
+2026-06-12 21:07:06 - INFO     - Command: dump
+2026-06-12 21:11:38 - INFO     - Registering new simulation: {'run_id': '7ccf985f-e85b-443b-90d8-cbe369abc9a7', 'run_name': 'sillonlab', 'project_name': None, 'platform': 'python', 'hostname': 'dalaran-8.local', 'organisation': None, 'author': None, 'project_path': '/Users/doph/Code/sillon/examples/sillonlab'}
+
+[SERVER] Creating/Writing to HDF5 at: /Users/doph/Code/sillon/examples/sillonlab/.sillon/glob/7ccf985f-e85b-443b-90d8-cbe369abc9a7/glob.hdf5
+2026-06-12 21:11:38 - INFO     - Simulation and env handler created
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: log_param
+2026-06-12 21:11:38 - INFO     - Command: log_param
+2026-06-12 21:11:38 - INFO     - Command: add_note
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: add_metadata
+2026-06-12 21:11:38 - INFO     - Command: dump
+2026-06-12 21:16:39 - INFO     - Idle timeout - shutting down.

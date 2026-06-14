@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/doph/Code/sillon/pyenv/bin/simply-server-daemon", line 6, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/doph/Code/sillon/packages/core/src/silloncore/server/main.py", line 12, in main
+    server = Server(project_path=sys.argv[1])
+  File "/Users/doph/Code/sillon/packages/core/src/silloncore/server/server.py", line 37, in __init__
+    socket_path.parent.mkdir(parents=True, exists_ok=True)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: Path.mkdir() got an unexpected keyword argument 'exists_ok'. Did you mean 'exist_ok'?

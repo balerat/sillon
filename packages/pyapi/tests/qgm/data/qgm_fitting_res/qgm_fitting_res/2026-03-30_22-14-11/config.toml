@@ -1,0 +1,70 @@
+[Environment]
+result_dir = "qgm_fitting_res"
+seed = 42
+
+[Data]
+roi_bg = [
+    827,
+    1006,
+    597,
+    764,
+]
+roi_main = [
+    390,
+    775,
+    296,
+    712,
+]
+n_shots = 1
+n_runs = 5
+n_hist = 20
+filter_in = [
+    0.3,
+    0,
+    0,
+]
+filter_post = [
+    0,
+    0,
+    0,
+]
+
+[Fitting]
+bound_k0 = [
+    0.35,
+    0.39,
+]
+bound_theta = [
+    1.5,
+    1.55,
+]
+n_bins_rms = 10
+fit_population = 10
+mode = "combined"
+lamb = 0
+
+[Octagon]
+population_cutoff = 0
+search_size = 8
+pixel_width = 3
+cloud_center = [
+    190,
+    215,
+]
+cloud_size = [
+    0,
+    100,
+]
+background_center = [
+    70,
+    70,
+]
+cloud_size_background = 70
+
+[Switch]
+population_mode = "pixelwise"
+
+[Debug]
+verbose = 0
+profiling = 0
+Note = "0 fixed rms"

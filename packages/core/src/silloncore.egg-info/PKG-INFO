@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: silloncore
+Version: 0.2.0
+Summary: The core engine for simply
+Author-email: Guillaume Tassotti <placeholder@email.com>, Baptiste Lerat <placeholder@email.com>
+License-File: LICENCE
+Requires-Dist: silloncommon
+Requires-Dist: toml
+Requires-Dist: h5py
+Requires-Dist: numpy
+Requires-Dist: names_generator
+Dynamic: license-file
