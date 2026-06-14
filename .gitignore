@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.vscode/*
 
 # Mac OS
 .DS_Store
