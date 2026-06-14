@@ -7,20 +7,24 @@ local store (SQLite + HDF5), then lets you explore and compare those runs from t
 or from a notebook. It is designed for researchers who run many simulations and want to keep
 track of what produced what.
 
-> Status: pre-1.0. The Python logging API, the background server, the CLI, and the analysis
+> Status: 1.0. The Python logging API, the background server, the CLI, and the analysis
 > library are functional. See the [roadmap](#roadmap) for what is not yet implemented.
 
 ## Install
 
 ```bash
-make install        # editable install of all packages into the active environment
-# or:
-pip install -e ./packages/common/ -e ./packages/interface/cli \
-            -e ./packages/interface/sillonlab -e ./packages/pyapi/ -e ./packages/core/
+pip install sillon              # the full toolchain
+pip install "sillon[analysis]"  # also installs pandas for to_dataframe()
 ```
 
-This provides two console commands: `sillon` (the CLI) and `sillon-server-daemon` (the logging
-server, launched automatically by the Python API).
+For development from a clone (editable install with test/build tooling):
+
+```bash
+pip install -e ".[dev]"         # or: make install
+```
+
+Either way you get two console commands: `sillon` (the CLI) and `sillon-server-daemon` (the
+logging server, launched automatically by the Python API).
 
 ## Quickstart — logging a run
 

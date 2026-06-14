@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sillon"
+description = "Git for simulations — log, track, query and analyze simulation runs."
+authors = [
+  { name="Guillaume Tassotti", email="placeholder@email.com" },
+  { name="Baptiste Lerat", email="lerat.baptiste99@proton.ch" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
+# Version is single-sourced from silloncommon.__version__ (see tool.setuptools.dynamic).
+dynamic = ["version"]
+dependencies = [
+  "sqlmodel",
+  "h5py",
+  "names_generator",
+  "rich",
+  "filelock",
+  "tabulate",
+  "toml",
+  "numpy",
+  "tqdm",
+]
+
+[project.optional-dependencies]
+analysis = ["pandas"]                 # sillonlab.to_dataframe lazy-imports pandas and guards
+dev = ["sillon[analysis]", "pytest", "build", "twine"]
+docs = ["mkdocs-material>=9.5.0", "mkdocstrings[python]>=0.24.0"]
+
+[project.urls]
+Homepage = "https://github.com/balerat/sillon"
+Repository = "https://github.com/balerat/sillon"
+Issues = "https://github.com/balerat/sillon/issues"
+
+[project.scripts]
+sillon = "silloncli.main:cli"
+sillon-server-daemon = "silloncore.server.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "silloncommon.__version__"}
+
+[tool.setuptools.packages.find]
+where = [
+  "packages/common/src",
+  "packages/core/src",
+  "packages/pyapi/src",
+  "packages/interface/cli/src",
+  "packages/interface/sillonlab/src",
+]

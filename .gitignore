@@ -1,0 +1,29 @@
+# Python Artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Mac OS
+.DS_Store
+
+# Simtrack / Simply specific
+.simply/
+
+# Virtual Environments & Secrets
+venv/
+env/
+pyenv/
+.venv/
+.env
+
+# MkDocs Output
+site/
+
+sandbox/
+examples/
+data/
+profiling.txt
+.idea/
+.claude/

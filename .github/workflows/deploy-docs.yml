@@ -1,0 +1,53 @@
+name: Deploy Docs to Cloudflare
+
+on:
+  push:
+    branches: ["main"]
+    # OPTIONAL PRO-TIP: Uncomment the lines below to only run this action 
+    # if documentation or python code actually changed!
+    # paths:
+    #   - 'docs/**'
+    #   - 'packages/**'
+    #   - 'mkdocs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Clone the ENTIRE monorepo at once (Code + Docs together!)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+      
+      # 3. Install dependencies and Build the website
+      - name: Install and Build MkDocs
+        run: |
+          # Install your MkDocs plugins
+          pip install -r requirements.txt
+          
+          # Install your monorepo packages so mkdocstrings can read the code!
+          make install
+
+          # Build the site
+          mkdocs build
+
+      # 4. Push to Cloudflare!
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: simply-docs-hub
+          directory: site   # MkDocs outputs to a folder named 'site' at the root
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

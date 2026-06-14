@@ -1,0 +1,7 @@
+{
+    "python.analysis.extraPaths": [
+        "./packages/pyapi/src",
+        "./packages/common/src",
+        "./packages/core/src"
+    ]
+}
