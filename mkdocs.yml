@@ -1,16 +1,60 @@
 site_name: Sillon Documentation
+site_description: Git for simulations — log, track, and analyze simulation runs.
+repo_url: https://github.com/balerat/sillon
+repo_name: balerat/sillon
+
 theme:
   name: material
+  custom_dir: overrides
+  favicon: favicon.svg
+  logo: favicon.svg
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+  palette:
+    - scheme: default
+      primary: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
 
 plugins:
   - search
   - mkdocstrings:
       handlers:
         python:
-          paths: 
-            - /packages/common/src/
-            - /packages/core/src/
-            - /packages/pyapi/src/
-            - /packages/interface/cli/src/
+          # No `paths`: the package is installed (editable) in the docs build,
+          # so every sub-package imports by name.
           options:
             docstring_style: google
+            filters: ["!^_"]          # hide private members
+            show_root_heading: true
+            members_order: source
+            show_source: false
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Install: guide/install.md
+      - Logging runs: guide/logging.md
+      - Command line: guide/cli.md
+      - Analysis: guide/analysis.md
+      - API reference:
+          - sillonpy: reference/sillonpy.md
+          - sillonlab: reference/sillonlab.md
+  - Contributing & Internals:
+      - Contributing: dev/contributing.md
+      - Development setup: dev/development.md
+      - Architecture: dev/architecture.md
+      - Internal reference:
+          - silloncore: dev/internals/silloncore.md
+          - silloncommon: dev/internals/silloncommon.md

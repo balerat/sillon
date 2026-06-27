@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<!-- NOTE: MkDocs renders this file through Jinja. Avoid Jinja delimiters in the
+     CSS/JS below (double-brace, brace-percent, brace-hash); wrap such edits in a
+     Jinja "raw" block if ever needed. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sillon — the wake your runs leave</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abyss:#0A1828;
+  --hull:#0E2438;
+  --hull-2:#102b44;
+  --wake:#1B6CA8;
+  --foam:#3DD4D4;
+  --ember:#F2A65A;
+  --ember-soft:#F4B97E;
+  --spray:#C7D7E3;
+  --slate:#5A7A94;
+  --line:rgba(90,122,148,.22);
+  --r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--abyss);
+  color:var(--spray);
+  font-family:'Inter',system-ui,sans-serif;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--foam);color:var(--abyss)}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+
+/* ---------- nav ---------- */
+nav{
+  position:sticky;top:0;z-index:50;
+  backdrop-filter:blur(14px);
+  background:rgba(10,24,40,.45);
+  border-bottom:1px solid var(--line);
+}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:62px}
+.brand{
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:700;font-size:21px;letter-spacing:-.02em;
+  display:flex;align-items:center;gap:10px;
+}
+.brand .glyph{color:var(--foam)}
+.nav-links{display:flex;gap:30px;align-items:center;font-size:14.5px;font-weight:500}
+.nav-links a{color:var(--slate);position:relative;padding:4px 0;transition:color .2s}
+.nav-links a::after{
+  content:"";position:absolute;left:0;bottom:-2px;height:2px;width:0;
+  background:var(--foam);transition:width .25s ease;
+}
+.nav-links a:hover{color:var(--spray)}
+.nav-links a:hover::after{width:100%}
+.nav-links a.ghbtn{
+  color:var(--spray);border:1px solid var(--line);
+  padding:7px 15px;border-radius:var(--r);
+}
+.nav-links a.ghbtn:hover{border-color:var(--foam);color:var(--foam)}
+.nav-links a.ghbtn::after{display:none}
+
+/* ---------- hero ---------- */
+.hero{
+  padding:130px 0 120px;position:relative;overflow:hidden;
+  display:flex;align-items:center;min-height:88vh;
+}
+/* full-bleed wave background — swap .hero-bg background-image for your render,
+   or drop a <video> inside .hero-bg and it'll cover automatically */
+.hero-bg{
+  position:absolute;inset:0;z-index:0;
+  background:#081320 url('wave.png') center/cover no-repeat;
+  /* gentle drift so a static render still feels alive; remove if using video */
+  animation:drift 26s ease-in-out infinite alternate;
+  will-change:transform;
+}
+.hero-bg video{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+}
+/* darken toward the text side so the title stays legible over any render */
+.hero-veil{
+  position:absolute;inset:0;z-index:1;
+  background:
+    linear-gradient(90deg, rgba(8,19,32,.94) 0%, rgba(8,19,32,.70) 42%, rgba(8,19,32,.28) 100%),
+    linear-gradient(180deg, rgba(10,24,40,.55) 0%, rgba(10,24,40,0) 32%, rgba(10,24,40,.88) 100%);
+}
+.hero .wrap{position:relative;z-index:2}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:13px;
+  color:var(--foam);letter-spacing:.18em;text-transform:uppercase;
+  margin-bottom:26px;opacity:0;animation:rise .7s .05s ease forwards;
+}
+.hero h1{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:clamp(52px,9vw,108px);
+  font-weight:700;line-height:.94;letter-spacing:-.04em;
+  margin-bottom:22px;color:#fff;
+  opacity:0;animation:rise .7s .12s ease forwards;
+}
+.hero h1 .tail{color:var(--ember)}
+.lede{
+  font-size:clamp(18px,2.4vw,23px);max-width:560px;color:var(--spray);
+  margin-bottom:38px;opacity:0;animation:rise .7s .2s ease forwards;
+}
+.lede b{color:var(--foam);font-weight:600}
+.install{
+  display:flex;align-items:center;gap:0;width:fit-content;
+  background:var(--hull);border:1px solid var(--line);border-radius:var(--r);
+  font-family:'JetBrains Mono',monospace;overflow:hidden;
+  opacity:0;animation:rise .7s .28s ease forwards;
+}
+.install code{padding:13px 18px;font-size:15px;color:var(--spray)}
+.install code .p{color:var(--slate)}
+.install button{
+  background:var(--hull-2);border:none;border-left:1px solid var(--line);
+  color:var(--slate);padding:13px 16px;cursor:pointer;font-size:13px;
+  font-family:'JetBrains Mono',monospace;transition:all .2s;align-self:stretch;
+}
+.install button:hover{color:var(--foam);background:#143150}
+.install button.copied{color:var(--ember);background:#143150}
+
+/* ---------- section scaffold ---------- */
+section.block{padding:84px 0;border-top:1px solid var(--line)}
+.sec-head{display:flex;align-items:baseline;gap:16px;margin-bottom:42px}
+.sec-num{
+  font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ember);
+  letter-spacing:.1em;
+}
+.sec-title{
+  font-family:'Space Grotesk',sans-serif;font-size:clamp(26px,4vw,38px);
+  font-weight:600;letter-spacing:-.02em;color:#fff;
+}
+.sec-sub{color:var(--slate);max-width:520px;margin-top:8px;font-size:15.5px}
+
+/* ---------- examples (tabbed) ---------- */
+.tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.tab{
+  font-family:'JetBrains Mono',monospace;font-size:13.5px;
+  padding:9px 16px;border-radius:8px;cursor:pointer;
+  color:var(--slate);background:transparent;border:1px solid var(--line);
+  transition:all .2s;
+}
+.tab:hover{color:var(--spray)}
+.tab.active{color:var(--abyss);background:var(--foam);border-color:var(--foam);font-weight:500}
+.codepane{
+  background:var(--hull);border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;display:none;
+}
+.codepane.active{display:block;animation:fade .35s ease}
+.code-top{
+  padding:10px 16px;border-bottom:1px solid var(--line);
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--slate);
+  display:flex;justify-content:space-between;
+}
+.code-top .tag{color:var(--foam)}
+pre{
+  padding:22px;overflow-x:auto;
+  font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.7;
+}
+.k{color:var(--foam)}      /* keyword */
+.s{color:#9fd0a0}          /* string */
+.c{color:var(--slate)}     /* comment */
+.f{color:#7fbce8}          /* func/attr */
+.n{color:#e0b97f}          /* number */
+.out{color:var(--slate);border-top:1px dashed var(--line);display:block;margin-top:14px;padding-top:14px}
+
+/* result media under each code pane — drop in a gif/video of it running */
+.result{
+  border-top:1px solid var(--line);background:#0b1f33;
+  padding:14px 16px 16px;
+}
+.result-label{
+  font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--slate);
+  letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px;
+  display:flex;align-items:center;gap:8px;
+}
+.result-label::before{content:"▸";color:var(--foam)}
+.result-media{
+  border-radius:8px;border:1px solid var(--line);overflow:hidden;
+  background:#081320;aspect-ratio:16/9;
+  display:flex;align-items:center;justify-content:center;position:relative;
+}
+.result-media img,.result-media video{width:100%;height:100%;object-fit:cover;display:block}
+.result-media .ph{
+  font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--slate);
+  letter-spacing:.05em;text-align:center;padding:20px;
+}
+.result-media .ph b{color:var(--foam);font-weight:500;display:block;margin-bottom:6px;font-size:14px}
+
+/* ---------- feature cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{
+  background:var(--hull);border:1px solid var(--line);border-radius:12px;
+  padding:26px 24px;transition:all .25s;
+}
+.card:hover{border-color:var(--wake);transform:translateY(-3px)}
+.card .ico{
+  font-family:'JetBrains Mono',monospace;color:var(--foam);
+  font-size:13px;letter-spacing:.1em;margin-bottom:16px;
+}
+.card h3{
+  font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:600;
+  color:#fff;margin-bottom:9px;letter-spacing:-.01em;
+}
+.card p{font-size:14.5px;color:var(--slate);line-height:1.6}
+
+/* ---------- cta ---------- */
+.cta{padding:96px 0;border-top:1px solid var(--line);text-align:center}
+.cta h2{
+  font-family:'Space Grotesk',sans-serif;font-size:clamp(30px,5vw,48px);
+  font-weight:600;color:#fff;letter-spacing:-.03em;margin-bottom:14px;
+}
+.cta p{color:var(--slate);margin-bottom:32px;font-size:17px}
+.cta-btn{
+  display:inline-flex;align-items:center;gap:10px;
+  background:var(--ember);color:#0A1828;font-weight:600;font-size:16px;
+  padding:15px 30px;border-radius:var(--r);transition:all .25s;
+  font-family:'Space Grotesk',sans-serif;
+  box-shadow:0 0 0 0 rgba(242,166,90,.4);
+}
+.cta-btn:hover{background:var(--ember-soft);gap:14px;box-shadow:0 8px 30px -6px rgba(242,166,90,.45)}
+
+/* ---------- footer ---------- */
+footer{
+  border-top:1px solid var(--line);padding:40px 0;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
+  color:var(--slate);font-size:14px;
+}
+footer .brand{font-size:17px}
+.foot-links{display:flex;gap:24px}
+.foot-links a:hover{color:var(--foam)}
+
+/* ---------- animations ---------- */
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes drift{from{transform:scale(1.06) translate(0,0)}to{transform:scale(1.12) translate(-2%,-1.5%)}}
+
+@media (max-width:760px){
+  .nav-links{gap:18px}
+  .nav-links a.docs-hide{display:none}
+  .cards{grid-template-columns:1fr}
+  .hero{padding:64px 0 40px}
+  section.block{padding:60px 0}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important}
+  .wave-row span{animation:none!important}
+  .hero-bg{animation:none!important;transform:scale(1.04)}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <div class="brand"><span class="glyph">≈</span>sillon</div>
+    <div class="nav-links">
+      <a href="#examples" class="docs-hide">examples</a>
+      <a href="guide/install/">docs</a>
+      <a href="https://github.com/balerat/sillon" class="ghbtn">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <!-- ░░ WAVE BACKGROUND: replace url('wave.png') in CSS with your render,
+       or uncomment the <video> below for a moving wake ░░ -->
+  <div class="hero-bg">
+    <!-- <video autoplay muted loop playsinline poster="wave.png">
+           <source src="wave.mp4" type="video/mp4">
+         </video> -->
+  </div>
+  <div class="hero-veil"></div>
+
+  <div class="wrap">
+    <div class="eyebrow">version control for simulation runs</div>
+    <h1>sillon<span class="tail">.</span></h1>
+    <p class="lede">Every run leaves a <b>wake</b>. Log it, version it, and pull it back later. A toolchain to track, store, and analyze the data your simulations leave behind.</p>
+    <div class="install">
+      <code><span class="p">$</span> pip install sillon</code>
+      <button onclick="copyInstall(this)">copy</button>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="examples">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <div>
+        <div class="sec-title">Three surfaces, one trail</div>
+        <p class="sec-sub">Log a run from your sim with <b>sillonpy</b>, query the history with <b>sillonlab</b>, or reach for the <b>sillon</b> CLI.</p>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab(0,this)">sillonpy</button>
+      <button class="tab" onclick="showTab(1,this)">sillonlab</button>
+      <button class="tab" onclick="showTab(2,this)">sillon (cli)</button>
+    </div>
+
+    <div class="codepane active">
+      <div class="code-top"><span>logging a run</span><span class="tag">python</span></div>
+<pre><span class="k">import</span> sillonpy <span class="k">as</span> sp
+<span class="k">import</span> numpy <span class="k">as</span> np
+
+<span class="c"># start a run — params, results, figures &amp; source are tracked</span>
+sp.<span class="f">init</span>(run_name<span class="k">=</span><span class="s">"my_fit"</span>, project_name<span class="k">=</span><span class="s">"lattice-mbl"</span>)
+sp.<span class="f">add_tag</span>(<span class="s">"quasicrystal"</span>)
+
+x <span class="k">=</span> np.<span class="f">linspace</span>(<span class="n">0</span>, <span class="n">10</span>, <span class="n">100</span>)
+sp.<span class="f">log_param</span>(<span class="s">"grid"</span>, <span class="n">512</span>)
+sp.<span class="f">log_result</span>(<span class="s">"coef"</span>, np.<span class="f">polyfit</span>(x, <span class="f">evolve</span>(x), <span class="n">1</span>))  <span class="c"># arrays → HDF5</span>
+<span class="out"># ↳ run my_fit sealed on exit · coef stored in the glob</span></pre>
+      <div class="result">
+        <div class="result-label">in action</div>
+        <div class="result-media">
+          <!-- replace with: <img src="log.gif" alt="logging a run"> or a <video> -->
+          <div class="ph"><b>log.gif</b>drop a recording of a run being logged</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="codepane">
+      <div class="code-top"><span>retrieving &amp; analyzing</span><span class="tag">python</span></div>
+<pre><span class="k">import</span> sillonlab <span class="k">as</span> sl
+
+<span class="c"># load the project store and query its history</span>
+project <span class="k">=</span> sl.<span class="f">load_project</span>()
+runs <span class="k">=</span> project.<span class="f">query</span>(tags<span class="k">=</span><span class="s">"quasicrystal"</span>,
+                     results<span class="k">=</span>{<span class="s">"coef"</span>: <span class="k">lambda</span> v: v[<span class="n">0</span>] <span class="k">&lt;</span> <span class="n">0</span>})
+
+df <span class="k">=</span> runs.<span class="f">to_dataframe</span>(results<span class="k">=</span><span class="k">True</span>)  <span class="c"># tidy DataFrame</span>
+coef <span class="k">=</span> project.<span class="f">get</span>(<span class="s">"my_fit"</span>).<span class="f">load_result</span>(<span class="s">"coef"</span>)  <span class="c"># arrays back</span>
+<span class="out"># ↳ 14 runs matched · cheap filters first, globs only on survivors</span></pre>
+      <div class="result">
+        <div class="result-label">in action</div>
+        <div class="result-media">
+          <!-- replace with: <img src="analyze.gif" alt="analyzing runs"> or a <video> -->
+          <div class="ph"><b>analyze.gif</b>drop a recording of a query + plot</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="codepane">
+      <div class="code-top"><span>command line</span><span class="tag">bash</span></div>
+<pre><span class="c"># inspect the trail without opening python</span>
+<span class="k">$</span> sillon context              <span class="c"># overview of all runs</span>
+<span class="k">$</span> sillon show my_fit -p -r    <span class="c"># full run detail</span>
+<span class="k">$</span> sillon compare my_fit my_fit_2   <span class="c"># diff two runs</span>
+<span class="k">$</span> sillon grab my_fit -r coef  <span class="c"># pull a result to disk</span>
+<span class="out">Run name   Timestamp             Params   Status
+my_fit     2026-06-01 10:00:00   2        SUCCESS
+my_fit_2   2026-06-02 14:20:00   2        SUCCESS</span></pre>
+      <div class="result">
+        <div class="result-label">in action</div>
+        <div class="result-media">
+          <!-- replace with: <img src="cli.gif" alt="sillon cli"> or a <video> -->
+          <div class="ph"><b>cli.gif</b>drop a terminal recording (asciinema → gif works well)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <div class="sec-title">What sillon gives you</div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="ico">sillonpy</div>
+        <h3>Capture</h3>
+        <p>Drop a couple of lines into a sim and every param, result, figure, and the source itself is recorded. The run seals automatically when it finishes.</p>
+      </div>
+      <div class="card">
+        <div class="ico">sillonlab</div>
+        <h3>Retrieve</h3>
+        <p>Query runs by params, metadata, tags, date, or result values, diff configs, and pull arrays straight back into memory. Your history is addressable.</p>
+      </div>
+      <div class="card">
+        <div class="ico">$ sillon</div>
+        <h3>Inspect</h3>
+        <p>A CLI for the trail — search, show, compare, grab, report, and prune runs from the terminal without writing a line of glue code.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap">
+    <h2>Read the docs</h2>
+    <p>Full guides, API reference, and the data model — built with MkDocs.</p>
+    <a href="guide/install/" class="cta-btn">Documentation →</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;width:100%">
+    <div class="brand"><span class="glyph">≈</span>sillon</div>
+    <div class="foot-links">
+      <a href="guide/install/">docs</a>
+      <a href="#examples">examples</a>
+      <a href="dev/contributing/">contribute</a>
+      <a href="https://pypi.org/project/sillon/">pypi</a>
+      <a href="https://github.com/balerat/sillon">github</a>
+    </div>
+    <div>the wake your runs leave</div>
+  </div>
+</footer>
+
+<script>
+function copyInstall(btn){
+  navigator.clipboard.writeText("pip install sillon");
+  const t=btn.textContent;btn.textContent="copied";btn.classList.add('copied');
+  setTimeout(()=>{btn.textContent=t;btn.classList.remove('copied')},1400);
+}
+function showTab(i,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.codepane').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.codepane')[i].classList.add('active');
+}
+</script>
+</body>
+</html>

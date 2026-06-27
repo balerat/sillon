@@ -646,13 +646,20 @@ def query_runs(
         engine (Engine): The active SQLAlchemy database engine.
         storage_root (str | Path, optional): The project storage root; required
             when filtering on result or analysis values.
-        parameters / results / analyses / metadata / fields (dict, optional):
-            Value/predicate conditions on the respective dimension.
-        has_parameter / has_metadata / has_result / has_analysis / has_artifact
-            / has_tag (list[str], optional): Presence filters.
-        before / after (datetime | str, optional): Date bounds (a `YYYY-MM-DD`
-            string parses to midnight); `before` is exclusive upper, `after`
-            exclusive lower.
+        parameters (dict, optional): Parameter value/predicate conditions.
+        results (dict, optional): Result value/predicate conditions.
+        analyses (dict, optional): Analysis value/predicate conditions.
+        metadata (dict, optional): Metadata value/predicate conditions.
+        fields (dict, optional): Top-level column value/predicate conditions.
+        has_parameter (list[str], optional): Parameter names that must exist.
+        has_metadata (list[str], optional): Metadata names that must exist.
+        has_result (list[str], optional): Result/artifact names that must exist.
+        has_analysis (list[str], optional): Analysis names that must exist.
+        has_artifact (list[str], optional): Artifact names that must exist.
+        has_tag (list[str], optional): Tags the run must have.
+        before (datetime | str, optional): Exclusive upper date bound
+            (a `YYYY-MM-DD` string parses to midnight).
+        after (datetime | str, optional): Exclusive lower date bound.
 
     Returns:
         list[str]: The names of the matching runs.

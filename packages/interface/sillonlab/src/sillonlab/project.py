@@ -160,14 +160,21 @@ class Project:
             ```
 
         Args:
-            has_parameter / has_metadata / has_result / has_analysis /
-                has_artifact (str | list, optional): Name(s) that must exist.
-            has_tag / tags (str | list, optional): Tag(s) the run must have.
-            parameters / metadata / results / analyses (dict, optional):
-                Value/predicate conditions on that dimension.
+            has_parameter (str | list, optional): Parameter name(s) that must exist.
+            has_metadata (str | list, optional): Metadata name(s) that must exist.
+            has_result (str | list, optional): Result/artifact name(s) that must exist.
+            has_analysis (str | list, optional): Analysis name(s) that must exist.
+            has_artifact (str | list, optional): Artifact name(s) that must exist.
+            has_tag (str | list, optional): Tag(s) the run must have.
+            tags (str | list, optional): Alias for `has_tag`.
+            parameters (dict, optional): Parameter value/predicate conditions.
+            metadata (dict, optional): Metadata value/predicate conditions.
+            results (dict, optional): Result value/predicate conditions.
+            analyses (dict, optional): Analysis value/predicate conditions.
             fields (dict, optional): Conditions on top-level columns (e.g.
                 `{"status": "SUCCESS", "author": "doph"}`).
-            before / after (datetime | str, optional): Run-date bounds.
+            before (datetime | str, optional): Keep runs created before this date.
+            after (datetime | str, optional): Keep runs created after this date.
             **param_conditions: Shorthand parameter value/predicate conditions.
 
         Returns:
