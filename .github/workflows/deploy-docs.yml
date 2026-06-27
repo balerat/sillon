@@ -48,6 +48,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: simply-docs-hub
+          projectName: sillon-docs-hub
           directory: site   # MkDocs outputs to a folder named 'site' at the root
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
