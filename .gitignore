@@ -18,7 +18,7 @@ env/
 pyenv/
 .venv/
 .env
-
+.vscode/
 # MkDocs Output
 site/
 
