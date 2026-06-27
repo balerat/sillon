@@ -60,7 +60,3 @@ sillon report [run_id] --dest [out.zip] [--with-data]
 
 > Planned for a future release (not yet available): `watch` (live TUI), `estimate` (resource
 > prediction), `source` (standalone source viewer), and `run` (relaunch/reproduce).
-
-::: cli
-    options:
-        show_submodules: true
