@@ -4,12 +4,14 @@ from typing import Any, List, Optional
 from silloncore.engine import (
     get_run_snapshot,
     load_run_result,
+    load_run_parameter,
     load_run_artifact,
     load_run_source,
     load_run_figure,
     load_run_analysis,
     add_run_analysis,
     add_metadata_to_runs,
+    delete_run as _engine_delete_run,
     fetch_run_result,
     get_run_sizes,
     export_run,
@@ -135,10 +137,9 @@ class Run:
     # ---------------------------------------------------------
 
     def _load_parameter(self, name: str) -> Any:
-        snapshot = self._load_snapshot()
-        if name not in snapshot["parameters"]:
-            raise LookupError(f"Invalid parameter '{name}' for run '{self.name}'.")
-        return snapshot["parameters"][name]
+        # Heavy array parameters are read back from the glob; light ones come
+        # straight from the database (engine handles both transparently).
+        return load_run_parameter(self.storage_root, self._load_snapshot(), name)
 
     def _load_metadata(self, name: str) -> Any:
         snapshot = self._load_snapshot()
@@ -382,6 +383,25 @@ class Run:
             pandas.DataFrame: A one-row summary of the run.
         """
         return RunCollection([self]).to_dataframe(metadata=metadata, results=results)
+
+    # ---------------------------------------------------------
+    # Deletion
+    # ---------------------------------------------------------
+
+    def delete(self) -> dict:
+        """Permanently deletes this run — its stored data and database row.
+
+        This is irreversible: the run's glob, artifacts and figures are removed
+        from disk and its database entry (with linked artifacts/figures/
+        analyses) is dropped. After this call the handle is stale.
+
+        Returns:
+            dict: `{"status": "success", "deleted": str, "freed_bytes": int}`,
+                or an error status if the run no longer exists.
+        """
+        out = _engine_delete_run(self.engine, self.storage_root, self.name)
+        self._snapshot = None  # Invalidate the cache; the run is gone
+        return out
 
     # ---------------------------------------------------------
     # Display

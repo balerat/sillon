@@ -30,6 +30,8 @@ def project_dir(tmp_path):
     with h5py.File(glob_dir / "glob.hdf5", "w") as g:
         g.create_dataset("result/coef", data=np.array([1.323, 323.0]))
         g.create_dataset("metadata/main_source", data="print('hello sillon')")
+        # A heavy parameter array offloaded to the glob 'parameter' group.
+        g.create_dataset("parameter/big_param", data=np.arange(1000, dtype=float))
 
     engine = create_engine("sqlite:///" + str(sillon_dir / "database.sql"))
     SQLModel.metadata.create_all(engine)
@@ -39,7 +41,17 @@ def project_dir(tmp_path):
                 uuid=RUN_A_UUID,
                 name="run_a",
                 date="2026-06-01-10:00:00",
-                parameters={"learning_rate": 0.01, "optimizer": "adam"},
+                parameters={
+                    "learning_rate": 0.01,
+                    "optimizer": "adam",
+                    # Heavy array param: DB keeps only a marker, data is in the glob.
+                    "big_param": {
+                        "__sillon_array_ref__": True,
+                        "pointer": "big_param",
+                        "shape": [1000],
+                        "dtype": "float64",
+                    },
+                },
                 results={"coef": "coef", "external": "/data/external.txt"},
                 meta_data={"sillon.language": "python 3.13"},
                 tag=["baseline"],
@@ -133,7 +145,7 @@ def test_project_details(project_dir):
         run_names="run_a", parameters=True
     )
     keys = {row.key for row in details["parameter"]}
-    assert keys == {"learning_rate", "optimizer"}
+    assert keys == {"learning_rate", "optimizer", "big_param"}
 
 
 def test_project_add_note_and_tag(project_dir):
@@ -154,7 +166,8 @@ def test_run_tracked_data(project_dir):
     run = sl.load_project(project_dir).get("run_a")
     assert run.uuid == RUN_A_UUID
     assert run.status == "SUCCESS"
-    assert run.parameters == {"learning_rate": 0.01, "optimizer": "adam"}
+    assert run.parameters["learning_rate"] == 0.01
+    assert run.parameters["optimizer"] == "adam"
     assert run.tags == ["baseline"]
     assert run.notes == ["first try"]
     assert set(run.results) == {"coef", "external", "mesh"}
@@ -168,6 +181,16 @@ def test_run_load_parameter(project_dir):
         run.load_parameter("nope")
     with pytest.raises(ValueError):
         run.load_parameter()
+
+
+def test_run_load_large_parameter_from_glob(project_dir):
+    run = sl.load_project(project_dir).get("run_a")
+    # Heavy array param: load_parameter reads it back from the glob as the array,
+    # while the raw .parameters dict only exposes the lightweight marker.
+    big = run.load_parameter("big_param")
+    assert np.allclose(big, np.arange(1000, dtype=float))
+    assert run.parameters["big_param"]["__sillon_array_ref__"] is True
+    assert run.parameters["big_param"]["shape"] == [1000]
 
 
 def test_run_load_result_from_glob(project_dir):
@@ -311,6 +334,52 @@ def test_run_add_note_tag_metadata(project_dir):
     assert {"reviewed", "v2"} <= set(fresh.tags)
     assert fresh.metadata["instrument"] == "laser-3"
     assert fresh.metadata["campaign"] == "june"
+
+
+# ==========================================
+#          RUN DELETION
+# ==========================================
+
+
+def test_run_delete(project_dir):
+    project = sl.load_project(project_dir)
+    run = project.get("run_a")
+
+    out = run.delete()
+    assert out["status"] == "success"
+    assert out["deleted"] == "run_a"
+
+    # The run is gone from the DB and the storage dirs are removed.
+    assert project.runs().list() == ["run_b"]
+    assert not (project_dir / ".sillon" / "glob" / RUN_A_UUID).exists()
+    assert not (project_dir / ".sillon" / "artifact" / RUN_A_UUID).exists()
+    assert not (project_dir / ".sillon" / "figure" / RUN_A_UUID).exists()
+    with pytest.raises(LookupError):
+        project.get("run_a")
+
+
+def test_sl_delete_run(project_dir):
+    project = sl.load_project(project_dir)
+    run = project.get("run_b")
+    assert sl.delete_run(run)["status"] == "success"
+    assert project.runs().list() == ["run_a"]
+
+
+def test_project_delete_run_by_name(project_dir):
+    project = sl.load_project(project_dir)
+    out = project.delete_run("run_a")
+    assert out["status"] == "success"
+    assert "run_a" not in project.runs().list()
+
+
+def test_delete_missing_run(project_dir):
+    project = sl.load_project(project_dir)
+    assert project.delete_run("ghost")["status"] == "error"
+
+
+def test_sl_delete_run_rejects_non_run(project_dir):
+    with pytest.raises(TypeError):
+        sl.delete_run("run_a")
 
 
 def test_run_add_metadata_requires_value(project_dir):

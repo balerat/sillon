@@ -178,6 +178,7 @@ class Glob:
         self.file.swmr_mode = True # Requires libver="latest" to be able to read the file while the server is running
         print(f"\n[SERVER] Creating/Writing to HDF5 at: {Path(str(simply_path / 'glob.hdf5')).resolve()}", flush=True)
         self.results = []
+        self.parameters = []
 
     def save(self, name, result_object):
         """Queues a result to be saved and calculates its hash.
@@ -199,6 +200,31 @@ class Glob:
         with h5py.File(staging_path, "r") as f:
             data = f["data"][()]
         pointer, hsh = self.save(name, data)
+        staging_path.unlink(missing_ok=True)
+
+        return pointer, hsh
+
+    def save_param(self, name, param_object):
+        """Queues a heavy parameter to be saved to the 'parameter' group.
+
+        Mirrors `save` but targets the parameter group so large input arrays
+        live in the glob (out of the SQLite database) exactly like results.
+
+        Args:
+            name (str): The target dataset name for this parameter.
+            param_object (Any): The data to be saved (h5py-compatible).
+
+        Returns:
+            tuple: `(name, sha256_hash)`.
+        """
+        self.parameters.append((f"{name}", param_object))
+        return name, get_hash(param_object)
+
+    def save_param_from_staging(self, name: str, staging_path: Path):
+        """Claims a staging hdf5 file into the permanent glob 'parameter' group, then deletes it."""
+        with h5py.File(staging_path, "r") as f:
+            data = f["data"][()]
+        pointer, hsh = self.save_param(name, data)
         staging_path.unlink(missing_ok=True)
 
         return pointer, hsh
@@ -228,6 +254,27 @@ class Glob:
         except TypeError as e:
             print(
                 f"Failed to save data: {e}. Ensure 'data' is a NumPy array or compatible type."
+            )
+
+    def commit_parameter(self):
+        """Writes all queued heavy parameters to the 'parameter' HDF5 group.
+
+        Mirrors `commit_result`: requires the 'parameter' group, overwrites any
+        duplicate dataset, and flushes to disk.
+        """
+        try:
+            param_group = self.file.require_group("parameter")
+
+            for name, data in self.parameters:
+                if name in param_group:
+                    print("Duplicate parameter dataset")
+                    del param_group[name]
+
+                param_group.create_dataset(name, data=data)
+            self.file.flush()
+        except TypeError as e:
+            print(
+                f"Failed to save parameter: {e}. Ensure 'data' is a NumPy array or compatible type."
             )
 
     def commit_source(self, source):

@@ -19,4 +19,25 @@ Example:
 from sillonlab.project import Project, load_project
 from sillonlab.run import Run, RunCollection
 
-__all__ = ["Project", "load_project", "Run", "RunCollection"]
+
+def delete_run(run: Run) -> dict:
+    """Permanently deletes a run (its stored data and database row).
+
+    Convenience wrapper around `Run.delete()`.
+
+    Args:
+        run (Run): The run handle to delete.
+
+    Returns:
+        dict: `{"status": "success", "deleted": str, "freed_bytes": int}`,
+            or an error status if the run no longer exists.
+    """
+    if not isinstance(run, Run):
+        raise TypeError(
+            "delete_run expects a Run object; to delete by name use "
+            "project.delete_run(name)."
+        )
+    return run.delete()
+
+
+__all__ = ["Project", "load_project", "Run", "RunCollection", "delete_run"]

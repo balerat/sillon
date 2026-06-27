@@ -176,6 +176,7 @@ class ProjectEnvironmentHandler:
             int: The database ID of the inserted simulation record.
         """
         run.glob.commit_result()
+        run.glob.commit_parameter()
         run.glob.close()
         table = insert_simulation(run, self._sql_session)
         self._sql_session.commit()

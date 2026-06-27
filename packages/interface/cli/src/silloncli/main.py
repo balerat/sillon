@@ -11,6 +11,7 @@ import silloncli.commands.search as search
 import silloncli.commands.grab as grab
 import silloncli.commands.prune as prune
 import silloncli.commands.report as report
+import silloncli.commands.delete as delete
 
 
 '''
@@ -26,6 +27,7 @@ COMMAND_LIST = {
     "grab": grab,
     "prune": prune,
     "report": report,
+    "delete": delete,
 }
 
 

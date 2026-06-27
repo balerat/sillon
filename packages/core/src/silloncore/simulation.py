@@ -241,12 +241,28 @@ class Simulation:
     def log_param(self, name: str, value: Any):
         """Logs a parameter key-value pair to the simulation state.
 
+        Lightweight, JSON-serializable values are stored inline in the
+        database. Heavy parameter arrays arrive as a staging reference
+        (``__sillon_array_ref__``) and are offloaded to the run's HDF5 glob
+        ``parameter`` group, exactly like large results; the database then
+        only keeps a small marker recording the pointer, shape and dtype.
+
         Args:
             name (str): The name of the parameter.
-            value (Any): The value of the parameter.
+            value (Any): The value of the parameter, or a staging reference.
         """
         # TODO: Add overwrite check if needed
-        self.parameters[name] = value
+        if isinstance(value, dict) and value.get("__sillon_array_ref__"):
+            staging_path = Path(value["staging_path"])
+            pointer, hsh = self.glob.save_param_from_staging(name, staging_path)
+            self.parameters[name] = {
+                "__sillon_array_ref__": True,
+                "pointer": pointer,
+                "shape": value.get("shape"),
+                "dtype": value.get("dtype"),
+            }
+        else:
+            self.parameters[name] = value
 
     def add_metadata(self, name: str, value: Any):
         """Adds custom metadata to the simulation.

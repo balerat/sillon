@@ -18,6 +18,7 @@ import silloncli.commands.prune as prune
 import silloncli.commands.report as report
 import silloncli.commands.show as show
 import silloncli.commands.add as add
+import silloncli.commands.delete as delete
 
 RUN_UUID = "cli-uuid-a"
 ARTIFACT_ID = "cli-art-1"
@@ -120,6 +121,16 @@ def test_prune_keep_metadata(project):
     assert not (base / ".sillon" / "glob" / RUN_UUID).exists()
     # metadata kept: the run is still searchable
     assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == ["exp"]
+
+
+def test_delete_run(project):
+    engine, storage_root, base = project
+    result = delete.command(engine, storage_root, {"run_name": ["exp"], "yes": True})
+    assert result[0]["status"] == "success"
+    assert result[0]["deleted"] == "exp"
+    # storage gone and run no longer in the DB
+    assert not (base / ".sillon" / "glob" / RUN_UUID).exists()
+    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == []
 
 
 def test_add_and_show(project, capsys):

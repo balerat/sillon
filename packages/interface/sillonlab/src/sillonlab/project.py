@@ -7,6 +7,7 @@ from silloncore.engine import (
     get_run_details,
     add_metadata_to_runs,
     query_runs,
+    delete_run as engine_delete_run,
     compare as engine_compare,
 )
 
@@ -220,6 +221,19 @@ class Project:
             notes=_as_list(notes),
             tags=_as_list(tags),
         )
+
+    def delete_run(self, run) -> dict:
+        """Permanently deletes a run (its stored data and database row).
+
+        Args:
+            run (Run | str): A `Run` handle, or the run name/uuid to delete.
+
+        Returns:
+            dict: `{"status": "success", "deleted": str, "freed_bytes": int}`,
+                or an error status if the run does not exist.
+        """
+        name = run.name if isinstance(run, Run) else run
+        return engine_delete_run(self.engine, self.storage_root, name)
 
     def compare(self, run_name1: str, run_name2: str) -> dict:
         """Diffs two runs (parameters, context, source), like `sillon compare`.

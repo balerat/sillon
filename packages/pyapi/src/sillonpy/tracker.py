@@ -122,6 +122,10 @@ class Tracker:
             self.callstack[func_id] = 1
 
     def log_param(self, id, parameter):
+        # Offload heavy parameter arrays to a staging file (claimed into the
+        # glob by the server), the same way large results are handled.
+        if is_large_array(parameter):
+            parameter = write_staging_array(parameter, self.project_path)
         self.server.execute_command(LogParamCmd(id, parameter))
 
     def log_result(self, id, result):

@@ -289,6 +289,33 @@ def load_run_result(storage_root, snapshot: dict, name: str):
     raise LookupError(f"Invalid result '{name}' for run '{snapshot['name']}'.")
 
 
+def load_run_parameter(storage_root, snapshot: dict, name: str):
+    """Loads one parameter value of a run, wherever it was stored.
+
+    Lightweight parameters are returned straight from the database. Heavy
+    parameter arrays were offloaded to the glob ``parameter`` group at log
+    time (the database only holds a marker), so they are read back from disk.
+
+    Args:
+        storage_root (str | Path): The folder holding the `glob` directory.
+        snapshot (dict): A run snapshot from `get_run_snapshot`.
+        name (str): The parameter name to load.
+
+    Raises:
+        LookupError: If the run has no parameter with this name.
+
+    Returns:
+        Any: The loaded parameter value.
+    """
+    if name not in snapshot["parameters"]:
+        raise LookupError(f"Invalid parameter '{name}' for run '{snapshot['name']}'.")
+
+    data = read_glob(storage_root, snapshot["uuid"], "parameter", name)
+    if data is not None:
+        return data
+    return snapshot["parameters"][name]
+
+
 def load_run_artifact(storage_root, snapshot: dict, name: str) -> Path:
     """Resolves the on-disk location of a saved artifact of a run.
 
@@ -775,6 +802,35 @@ def prune_runs(
         "pruned": pruned,
         "freed_bytes": freed,
         "kept_metadata": keep_metadata,
+    }
+
+
+def delete_run(engine, storage_root, run_name) -> dict:
+    """Permanently deletes a single run: its stored data and its database row.
+
+    Removes the run's `glob/`, `artifact/` and `figure/` folders and deletes
+    the `SimulationTable` row along with its linked artifacts, figures, and
+    analyses. This is the irreversible "I don't want this run anymore" action
+    (unlike `prune_runs(..., keep_metadata=True)`, which only frees disk).
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        storage_root (str | Path): The project storage root.
+        run_name (str): The name or uuid of the run to delete.
+
+    Returns:
+        dict: `{"status": "success", "deleted": str, "freed_bytes": int}`, or
+            `{"status": "error", "message": str}` if the run does not exist.
+    """
+    result = prune_runs(
+        engine, storage_root, run_names=[run_name], keep_metadata=False
+    )
+    if not result["pruned"]:
+        return {"status": "error", "message": f"Run '{run_name}' not found."}
+    return {
+        "status": "success",
+        "deleted": result["pruned"][0],
+        "freed_bytes": result["freed_bytes"],
     }
 
 
