@@ -1,7 +1,7 @@
 site_name: Sillon Documentation
-site_description: Git for simulations — log, track, and analyze simulation runs.
+site_description: log, track, and analyze simulation runs.
 repo_url: https://github.com/balerat/sillon
-repo_name: balerat/sillon
+repo_name: sillon
 
 theme:
   name: material
@@ -17,12 +17,12 @@ theme:
     - search.suggest
   palette:
     - scheme: default
-      primary: deep orange
+      primary: blue grey
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - scheme: slate
-      primary: deep orange
+      primary: blue grey
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
