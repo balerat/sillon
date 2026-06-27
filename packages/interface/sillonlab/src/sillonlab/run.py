@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 
 from silloncore.engine import (
     get_run_snapshot,
+    match_run,
     load_run_result,
     load_run_parameter,
     load_run_artifact,
@@ -20,6 +21,13 @@ from silloncore.engine import (
 )
 
 from sillonlab.display import print_run, print_run_table
+
+
+def _as_list(value):
+    """Normalizes a str/list/None argument to a list (or None)."""
+    if value is None:
+        return None
+    return [value] if isinstance(value, str) else list(value)
 
 
 class Run:
@@ -453,52 +461,73 @@ class RunCollection:
         """
         return RunCollection([run for run in self._runs if predicate(run)])
 
-    def where(self, has_result=None, has_artifact=None, **conditions) -> "RunCollection":
-        """Filters the collection on parameters, results, and artifacts.
+    def where(
+        self,
+        has_parameter=None,
+        has_metadata=None,
+        has_result=None,
+        has_analysis=None,
+        has_artifact=None,
+        has_tag=None,
+        tags=None,
+        parameters=None,
+        metadata=None,
+        results=None,
+        analyses=None,
+        fields=None,
+        before=None,
+        after=None,
+        **param_conditions,
+    ) -> "RunCollection":
+        """Filters the collection on value/predicate and presence criteria.
 
-        Parameter conditions map a name to a plain value (equality) or a
-        callable predicate. `has_result` / `has_artifact` keep only runs that
-        have the named result or artifact. All criteria must hold.
+        Same criteria as `Project.query` (parameters, metadata, results,
+        analyses, fields, tags, date, and `has_*` presence), but applied to the
+        runs already in this collection. Cheap criteria are checked before any
+        glob is read.
 
         Example:
             ```python
             runs.where(optimizer="adam", learning_rate=lambda v: v < 0.1)
-            runs.where(has_result="coef")
+            runs.where(metadata={"sillon.language": "python"})
+            runs.where(tags="baseline", after="2026-06-01")
+            runs.where(results={"final_loss": lambda v: v < 0.05})
             ```
 
         Args:
-            has_result (str | list, optional): Result name(s) that must exist.
-            has_artifact (str | list, optional): Artifact name(s) that must exist.
-            **conditions: Parameter names mapped to values or predicates.
+            has_parameter / has_metadata / has_result / has_analysis /
+                has_artifact (str | list, optional): Name(s) that must exist.
+            has_tag / tags (str | list, optional): Tag(s) the run must have.
+            parameters / metadata / results / analyses (dict, optional):
+                Value/predicate conditions on that dimension.
+            fields (dict, optional): Conditions on top-level columns.
+            before / after (datetime | str, optional): Run-date bounds.
+            **param_conditions: Shorthand parameter value/predicate conditions.
 
         Returns:
             RunCollection: The matching runs.
         """
-        required_results = [has_result] if isinstance(has_result, str) else (has_result or [])
-        required_artifacts = (
-            [has_artifact] if isinstance(has_artifact, str) else (has_artifact or [])
-        )
+        merged_parameters = {**(parameters or {}), **param_conditions} or None
+        merged_tags = (_as_list(has_tag) or []) + (_as_list(tags) or [])
 
         def matches(run: Run) -> bool:
-            parameters = run.parameters
-            for key, condition in conditions.items():
-                if key not in parameters:
-                    return False
-                if callable(condition):
-                    if not condition(parameters[key]):
-                        return False
-                elif parameters[key] != condition:
-                    return False
-
-            results = set(run.results)
-            if not all(name in results for name in required_results):
-                return False
-
-            artifact_names = run._load_snapshot()["artifacts"].keys()
-            if not all(name in artifact_names for name in required_artifacts):
-                return False
-
-            return True
+            return match_run(
+                run.storage_root,
+                run._load_snapshot(),
+                parameters=merged_parameters,
+                metadata=metadata,
+                results=results,
+                analyses=analyses,
+                fields=fields,
+                has_parameter=_as_list(has_parameter),
+                has_metadata=_as_list(has_metadata),
+                has_result=_as_list(has_result),
+                has_analysis=_as_list(has_analysis),
+                has_artifact=_as_list(has_artifact),
+                has_tag=merged_tags or None,
+                before=before,
+                after=after,
+            )
 
         return self.filter(matches)
 

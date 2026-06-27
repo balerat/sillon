@@ -904,48 +904,69 @@ def select_uuids(engine: Engine) -> Sequence[Any]:
 
 
 def select_run_index(engine: Engine) -> List[Dict[str, Any]]:
-    """Builds a lightweight searchable index of every run.
+    """Builds a rich, glob-free searchable index of every run, in bulk.
 
-    One pass over the runs and their artifacts, returning the data needed to
-    filter runs by parameter values or by the presence of a named result or
-    artifact, without loading any heavy glob data.
+    Returns everything needed to filter runs *cheaply* (without touching any
+    HDF5 glob): every database column plus the names of each run's artifacts,
+    analyses, and figures. The number of SQL queries is constant, independent
+    of the number of runs — this is the backbone of the two-phase query (cheap
+    DB filtering first, glob reads only on the survivors).
 
     Args:
         engine (Engine): The SQLAlchemy engine.
 
     Returns:
-        List[dict]: One entry per run with keys `name`, `parameters` (dict),
-            `results` (list of result names) and `artifacts` (list of artifact
-            names).
+        List[dict]: One entry per run with its identity and columns
+            (`id`, `uuid`, `name`, `date`, `status`, `author`, `hostname`,
+            `platform`, `runtime`, `sillonversion`), its JSON columns
+            (`parameters`, `results`, `meta_data`, `tag`, `note`, `hashes`),
+            and the linked-item name lists (`result_names`, `artifacts`,
+            `analyses`, `figures`).
     """
     with Session(engine) as session:
-        runs = session.exec(
-            select(
-                SimulationTable.id,
-                SimulationTable.name,
-                SimulationTable.parameters,
-                SimulationTable.results,
+        runs = session.exec(select(SimulationTable)).all()
+
+        def _names_by_run(table):
+            try:
+                rows = session.exec(select(table.run_id, table.name)).all()
+            except OperationalError:
+                return {}  # table absent in an older database
+            mapping: Dict[Any, List[str]] = {}
+            for run_id, item_name in rows:
+                mapping.setdefault(run_id, []).append(item_name)
+            return mapping
+
+        artifacts_by_run = _names_by_run(ArtifactTable)
+        analyses_by_run = _names_by_run(AnalysisTable)
+        figures_by_run = _names_by_run(FigureTable)
+
+        index = []
+        for run in runs:
+            index.append(
+                {
+                    "id": run.id,
+                    "uuid": run.uuid,
+                    "name": run.name,
+                    "date": run.date,
+                    "status": run.status,
+                    "author": run.author,
+                    "hostname": run.hostname,
+                    "platform": run.platform,
+                    "runtime": run.runtime,
+                    "sillonversion": run.sillonversion,
+                    "parameters": run.parameters or {},
+                    "results": run.results or {},
+                    "result_names": list((run.results or {}).keys()),
+                    "meta_data": run.meta_data or {},
+                    "tag": run.tag or [],
+                    "note": run.note or [],
+                    "hashes": run.hashes or {},
+                    "artifacts": artifacts_by_run.get(run.id, []),
+                    "analyses": analyses_by_run.get(run.id, []),
+                    "figures": figures_by_run.get(run.id, []),
+                }
             )
-        ).all()
-        artifacts = session.exec(
-            select(ArtifactTable.run_id, ArtifactTable.name)
-        ).all()
-
-    artifacts_by_run: Dict[Any, List[str]] = {}
-    for run_id, artifact_name in artifacts:
-        artifacts_by_run.setdefault(run_id, []).append(artifact_name)
-
-    index = []
-    for run_id, name, parameters, results in runs:
-        index.append(
-            {
-                "name": name,
-                "parameters": parameters or {},
-                "results": list((results or {}).keys()),
-                "artifacts": artifacts_by_run.get(run_id, []),
-            }
-        )
-    return index
+        return index
 
 
 def select_run_identities(engine: Engine) -> List[Dict[str, Any]]:

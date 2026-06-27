@@ -16,7 +16,7 @@ from silloncommon.database import (
     db_delete_runs,
 )
 
-from silloncore.glob import read_glob, append_glob, glob_sizes, get_hash
+from silloncore.glob import read_glob, read_glob_many, append_glob, glob_sizes, get_hash
 from silloncore.versioncontrol import Reference, Diffref
 
 
@@ -384,34 +384,309 @@ def _match_conditions(values: dict, conditions: dict) -> bool:
     return True
 
 
-def query_runs(engine, parameters: dict = None, results=None, artifacts=None) -> list:
-    """Finds the runs matching parameter, result, and artifact criteria.
+def _to_datetime(value):
+    """Coerces a datetime or `YYYY-MM-DD[-HH:MM:SS]` string to a datetime, or None."""
+    from datetime import datetime
 
-    All provided criteria must hold (logical AND). With no criteria, every run
-    is returned.
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d-%H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def _searchable_columns(entry: dict) -> dict:
+    """Flat dict of a run's scalar searchable fields, for `fields={...}` queries.
+
+    This is the single extensibility hook: to make a new top-level field
+    searchable (e.g. a future git hash already living in the `hashes` column),
+    add it here — no query-engine or API changes needed. The `hashes` JSON
+    column is flattened in, so `fields={"git": ...}` works as soon as runs
+    record `hashes["git"]`.
+    """
+    columns = {
+        "name": entry.get("name"),
+        "date": entry.get("date"),
+        "status": entry.get("status"),
+        "author": entry.get("author"),
+        "hostname": entry.get("hostname"),
+        "platform": entry.get("platform"),
+        "runtime": entry.get("runtime"),
+        "sillonversion": entry.get("sillonversion"),
+    }
+    columns.update(entry.get("hashes") or {})  # git, source, ... -> top level
+    return columns
+
+
+def match_cheap(
+    entry: dict,
+    parameters: dict = None,
+    metadata: dict = None,
+    fields: dict = None,
+    has_parameter=None,
+    has_metadata=None,
+    has_result=None,
+    has_analysis=None,
+    has_artifact=None,
+    has_tag=None,
+    before=None,
+    after=None,
+    storage_root=None,
+) -> bool:
+    """Tests the database-only (glob-free) criteria against a run.
+
+    Works on either a `select_run_index` row or a `get_run_snapshot` dict — it
+    only reads fields present in both (parameters, meta_data, tag, date,
+    hashes, columns, and the result/artifact/analysis *names*). This is the
+    cheap first phase of a query; no HDF5 file is opened (the only exception is
+    a value condition on a glob-stored big-array parameter, which is rare).
+
+    Args mirror the value/presence criteria documented on `query_runs`.
+
+    Returns:
+        bool: True if the run satisfies every cheap criterion.
+    """
+    result_names = set(entry["results"]) | set(entry["artifacts"])
+
+    # --- presence filters ---
+    for name in has_parameter or []:
+        if name not in entry["parameters"]:
+            return False
+    for name in has_metadata or []:
+        if name not in entry["meta_data"]:
+            return False
+    for name in has_result or []:
+        if name not in result_names:
+            return False
+    for name in has_analysis or []:
+        if name not in set(entry["analyses"]):
+            return False
+    for name in has_artifact or []:
+        if name not in set(entry["artifacts"]):
+            return False
+    for name in has_tag or []:
+        if name not in (entry["tag"] or []):
+            return False
+
+    # --- date range ---
+    if before is not None or after is not None:
+        run_dt = _to_datetime(entry.get("date"))
+        if run_dt is None:
+            return False
+        if before is not None and not run_dt < _to_datetime(before):
+            return False
+        if after is not None and not run_dt > _to_datetime(after):
+            return False
+
+    # --- value / predicate filters (DB columns) ---
+    if parameters:
+        values = {}
+        for name in parameters:
+            if name not in entry["parameters"]:
+                continue
+            stored = entry["parameters"][name]
+            # Heavy array params keep only a marker in the DB; load the value.
+            if isinstance(stored, dict) and stored.get("__sillon_array_ref__"):
+                values[name] = load_run_parameter(storage_root, entry, name)
+            else:
+                values[name] = stored
+        if not _match_conditions(values, parameters):
+            return False
+
+    if metadata:
+        values = {n: entry["meta_data"][n] for n in metadata if n in entry["meta_data"]}
+        if not _match_conditions(values, metadata):
+            return False
+
+    if fields:
+        if not _match_conditions(_searchable_columns(entry), fields):
+            return False
+
+    return True
+
+
+def match_heavy(storage_root, snapshot: dict, results: dict = None, analyses: dict = None) -> bool:
+    """Tests result/analysis value conditions, reading the run's glob once.
+
+    All needed datasets are read in a single file open (`read_glob_many`);
+    non-glob results (artifacts, plain DB values) fall back to `load_run_result`.
+
+    Args:
+        storage_root (str | Path): The project storage root.
+        snapshot (dict): A full run snapshot from `get_run_snapshot`.
+        results (dict, optional): Result value/predicate conditions.
+        analyses (dict, optional): Analysis value/predicate conditions.
+
+    Returns:
+        bool: True if the run satisfies every heavy criterion.
+    """
+    result_names = set(snapshot["results"]) | set(snapshot["artifacts"])
+
+    reads = []
+    if results:
+        reads += [("result", n) for n in results if n in result_names]
+    if analyses:
+        reads += [("analysis", n) for n in analyses if n in snapshot["analyses"]]
+    data = read_glob_many(storage_root, snapshot["uuid"], reads)
+
+    if results:
+        values = {}
+        for name in results:
+            if name not in result_names:
+                continue  # missing -> excluded by _match_conditions
+            value = data.get(("result", name))
+            if value is None:  # artifact result or plain DB value
+                value = load_run_result(storage_root, snapshot, name)
+            values[name] = value
+        if not _match_conditions(values, results):
+            return False
+
+    if analyses:
+        values = {}
+        for name in analyses:
+            if name not in snapshot["analyses"]:
+                continue
+            value = data.get(("analysis", name))
+            if value is None:
+                value = load_run_analysis(storage_root, snapshot, name)
+            values[name] = value
+        if not _match_conditions(values, analyses):
+            return False
+
+    return True
+
+
+def match_run(
+    storage_root,
+    snapshot: dict,
+    parameters: dict = None,
+    results: dict = None,
+    analyses: dict = None,
+    metadata: dict = None,
+    fields: dict = None,
+    has_parameter=None,
+    has_metadata=None,
+    has_result=None,
+    has_analysis=None,
+    has_artifact=None,
+    has_tag=None,
+    before=None,
+    after=None,
+) -> bool:
+    """Tests all query criteria against an in-memory run snapshot.
+
+    Cheap criteria are checked first (so the glob is only touched when a run
+    passes them and there are result/analysis value conditions). Used by
+    `RunCollection.where`, which already holds full snapshots in memory.
+    """
+    if not match_cheap(
+        snapshot,
+        parameters=parameters,
+        metadata=metadata,
+        fields=fields,
+        has_parameter=has_parameter,
+        has_metadata=has_metadata,
+        has_result=has_result,
+        has_analysis=has_analysis,
+        has_artifact=has_artifact,
+        has_tag=has_tag,
+        before=before,
+        after=after,
+        storage_root=storage_root,
+    ):
+        return False
+
+    if (results or analyses) and not match_heavy(storage_root, snapshot, results, analyses):
+        return False
+
+    return True
+
+
+def query_runs(
+    engine,
+    storage_root=None,
+    parameters: dict = None,
+    results: dict = None,
+    analyses: dict = None,
+    metadata: dict = None,
+    fields: dict = None,
+    has_parameter=None,
+    has_metadata=None,
+    has_result=None,
+    has_analysis=None,
+    has_artifact=None,
+    has_tag=None,
+    before=None,
+    after=None,
+) -> list:
+    """Finds the runs matching a set of criteria, in two phases for speed.
+
+    Phase 1 (cheap, glob-free): a single bulk index fetch
+    (`select_run_index`) is filtered in memory on the database-only criteria —
+    parameter and metadata value/predicate conditions, generic column
+    conditions (`fields`), date range (`before`/`after`), and all presence
+    filters (`has_parameter`, `has_metadata`, `has_result`, `has_analysis`,
+    `has_artifact`, `has_tag`).
+
+    Phase 2 (heavy, only when `results`/`analyses` value conditions are given):
+    for each survivor of phase 1, its glob is opened once to evaluate the
+    result/analysis value conditions. So globs are read only for runs that
+    already passed the cheap filters, and never for pure cheap queries.
+
+    Value conditions (`parameters`, `results`, `analyses`, `metadata`, `fields`)
+    are dicts mapping a name to an expected value (equality) or a callable
+    predicate. Presence filters are lists of names. All criteria combine with
+    logical AND; with no criteria every run is returned.
 
     Args:
         engine (Engine): The active SQLAlchemy database engine.
-        parameters (dict, optional): Mapping of parameter names to expected
-            values or predicates (e.g. `{"optimizer": "adam", "lr": lambda v: v < 0.1}`).
-        results (list[str], optional): Result names that must be present on the
-            run (a result stored as an artifact also counts).
-        artifacts (list[str], optional): Artifact names that must be present.
+        storage_root (str | Path, optional): The project storage root; required
+            when filtering on result or analysis values.
+        parameters / results / analyses / metadata / fields (dict, optional):
+            Value/predicate conditions on the respective dimension.
+        has_parameter / has_metadata / has_result / has_analysis / has_artifact
+            / has_tag (list[str], optional): Presence filters.
+        before / after (datetime | str, optional): Date bounds (a `YYYY-MM-DD`
+            string parses to midnight); `before` is exclusive upper, `after`
+            exclusive lower.
 
     Returns:
         list[str]: The names of the matching runs.
     """
+    survivors = [
+        entry
+        for entry in select_run_index(engine)
+        if match_cheap(
+            entry,
+            parameters=parameters,
+            metadata=metadata,
+            fields=fields,
+            has_parameter=has_parameter,
+            has_metadata=has_metadata,
+            has_result=has_result,
+            has_analysis=has_analysis,
+            has_artifact=has_artifact,
+            has_tag=has_tag,
+            before=before,
+            after=after,
+            storage_root=storage_root,
+        )
+    ]
+
+    # Pure cheap query: no glob reads at all.
+    if not (results or analyses):
+        return [entry["name"] for entry in survivors]
+
+    # Heavy phase: open globs only for the survivors of the cheap filters.
     matching = []
-    for entry in select_run_index(engine):
-        if parameters and not _match_conditions(entry["parameters"], parameters):
-            continue
-        if results:
-            available = set(entry["results"]) | set(entry["artifacts"])
-            if not all(name in available for name in results):
-                continue
-        if artifacts and not all(name in entry["artifacts"] for name in artifacts):
-            continue
-        matching.append(entry["name"])
+    for entry in survivors:
+        snapshot = get_run_snapshot(engine, entry["uuid"])
+        if snapshot is not None and match_heavy(storage_root, snapshot, results, analyses):
+            matching.append(snapshot["name"])
     return matching
 
 

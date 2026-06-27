@@ -9,7 +9,8 @@ from silloncore.engine import query_runs
 def add_parser(command_subparser):
     # -- Parser for the search command -- #
     search_parser = command_subparser.add_parser(
-        "search", help="Find runs by parameter value, or by result/artifact presence."
+        "search",
+        help="Find runs by parameter/metadata value, tag, date, or result/artifact presence.",
     )
     search_parser.add_argument(
         "-p",
@@ -19,6 +20,34 @@ def add_parser(command_subparser):
         default=None,
         metavar="KEY=VALUE",
         help="Parameter equality filter, e.g. -p optimizer=adam lr=0.01",
+    )
+    search_parser.add_argument(
+        "-m",
+        "--meta",
+        nargs="+",
+        type=str,
+        default=None,
+        metavar="KEY=VALUE",
+        help="Metadata equality filter, e.g. -m sillon.language=python",
+    )
+    search_parser.add_argument(
+        "-t",
+        "--tag",
+        nargs="+",
+        type=str,
+        default=None,
+        help="Keep runs that have these tag(s).",
+    )
+    search_parser.add_argument(
+        "--status", type=str, default=None, help="Keep runs with this status."
+    )
+    search_parser.add_argument(
+        "--before", type=str, default=None, metavar="DATE",
+        help="Keep runs created before DATE (YYYY-MM-DD).",
+    )
+    search_parser.add_argument(
+        "--after", type=str, default=None, metavar="DATE",
+        help="Keep runs created after DATE (YYYY-MM-DD).",
     )
     search_parser.add_argument(
         "-r",
@@ -37,6 +66,14 @@ def add_parser(command_subparser):
         help="Keep runs that have these artifact name(s).",
     )
     search_parser.add_argument(
+        "-A",
+        "--analysis",
+        nargs="+",
+        type=str,
+        default=None,
+        help="Keep runs that have these analysis name(s).",
+    )
+    search_parser.add_argument(
         "--limit", type=int, default=None, help="Limit the number of results shown."
     )
 
@@ -53,21 +90,36 @@ def command(engine, storage_root, args):
     """CLI Search Command Handler"""
     console = Console()
 
-    parameters = None
-    if args.get("parameter"):
-        parameters = {}
-        for item in args["parameter"]:
+    def _parse_kv(items):
+        """Parses a list of KEY=VALUE strings into an equality-conditions dict."""
+        if not items:
+            return None
+        out = {}
+        for item in items:
             if "=" not in item:
                 console.print(f"[red]Ignoring '{item}': expected KEY=VALUE.[/red]")
                 continue
             key, raw = item.split("=", 1)
-            parameters[key] = _parse_value(raw)
+            out[key] = _parse_value(raw)
+        return out or None
 
+    fields = {"status": args["status"]} if args.get("status") else None
+
+    # The shell expresses equality (-p/-m KEY=VALUE, --status), presence
+    # filters (-r/-a/-A/-t), and date bounds; value predicates are a
+    # programmatic (sillonlab) feature.
     names = query_runs(
         engine,
-        parameters=parameters,
-        results=args.get("result"),
-        artifacts=args.get("artifact"),
+        storage_root,
+        parameters=_parse_kv(args.get("parameter")),
+        metadata=_parse_kv(args.get("meta")),
+        fields=fields,
+        has_result=args.get("result"),
+        has_artifact=args.get("artifact"),
+        has_analysis=args.get("analysis"),
+        has_tag=args.get("tag"),
+        before=args.get("before"),
+        after=args.get("after"),
     )
 
     limit = args.get("limit")

@@ -117,34 +117,80 @@ class Project:
             ]
         )
 
-    def query(self, has_result=None, has_artifact=None, **conditions) -> RunCollection:
-        """Finds the runs matching parameter, result, and artifact criteria.
+    def query(
+        self,
+        has_parameter=None,
+        has_metadata=None,
+        has_result=None,
+        has_analysis=None,
+        has_artifact=None,
+        has_tag=None,
+        tags=None,
+        parameters=None,
+        metadata=None,
+        results=None,
+        analyses=None,
+        fields=None,
+        before=None,
+        after=None,
+        **param_conditions,
+    ) -> RunCollection:
+        """Finds the runs matching value/predicate and presence criteria.
 
-        Parameter conditions map a name to a plain value (equality) or a
-        callable predicate. `has_result` / `has_artifact` filter on the
-        presence of a named result or artifact. All criteria must hold.
+        Value conditions map a name to a plain value (equality) or a callable
+        predicate, and can target `parameters`, `metadata`, `results`, or
+        `analyses`. Bare keyword arguments are a shorthand for parameter
+        conditions. `fields` filters on top-level columns (status, author,
+        git hash, ...). `before`/`after` filter on the run date. Presence
+        filters (`has_*`, `tags`) keep only runs that have the named item.
+
+        Cheap criteria (parameters, metadata, tags, date, fields, presence) are
+        resolved entirely from the database; result/analysis value conditions
+        read the glob, but only for runs that already passed the cheap filters.
 
         Example:
             ```python
-            project.query(optimizer="adam")
-            project.query(learning_rate=lambda lr: lr < 0.1)
-            project.query(has_result="coef")
-            project.query(optimizer="adam", has_artifact="mesh")
+            project.query(optimizer="adam")                       # param equality
+            project.query(learning_rate=lambda lr: lr < 0.1)      # param predicate
+            project.query(metadata={"sillon.language": "python"})
+            project.query(tags="baseline", after="2026-06-01")
+            project.query(fields={"status": "SUCCESS"})
+            project.query(results={"final_loss": lambda v: v < 0.05})
+            project.query(tags="prod", results={"loss": lambda v: v < 0.1})
             ```
 
         Args:
-            has_result (str | list, optional): Result name(s) that must exist.
-            has_artifact (str | list, optional): Artifact name(s) that must exist.
-            **conditions: Parameter names mapped to values or predicates.
+            has_parameter / has_metadata / has_result / has_analysis /
+                has_artifact (str | list, optional): Name(s) that must exist.
+            has_tag / tags (str | list, optional): Tag(s) the run must have.
+            parameters / metadata / results / analyses (dict, optional):
+                Value/predicate conditions on that dimension.
+            fields (dict, optional): Conditions on top-level columns (e.g.
+                `{"status": "SUCCESS", "author": "doph"}`).
+            before / after (datetime | str, optional): Run-date bounds.
+            **param_conditions: Shorthand parameter value/predicate conditions.
 
         Returns:
             RunCollection: The matching runs.
         """
+        merged_parameters = {**(parameters or {}), **param_conditions} or None
+        merged_tags = (_as_list(has_tag) or []) + (_as_list(tags) or [])
         names = query_runs(
             self.engine,
-            parameters=conditions or None,
-            results=_as_list(has_result),
-            artifacts=_as_list(has_artifact),
+            self.storage_root,
+            parameters=merged_parameters,
+            metadata=metadata,
+            results=results,
+            analyses=analyses,
+            fields=fields,
+            has_parameter=_as_list(has_parameter),
+            has_metadata=_as_list(has_metadata),
+            has_result=_as_list(has_result),
+            has_analysis=_as_list(has_analysis),
+            has_artifact=_as_list(has_artifact),
+            has_tag=merged_tags or None,
+            before=before,
+            after=after,
         )
         return RunCollection(
             [

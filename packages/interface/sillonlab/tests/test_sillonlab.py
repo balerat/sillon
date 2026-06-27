@@ -442,6 +442,137 @@ def test_collection_where_has_result(project_dir):
     assert runs.where(has_artifact="mesh").list() == ["run_a"]
 
 
+def test_project_query_result_value_condition(project_dir):
+    project = sl.load_project(project_dir)
+    # Equality on a plain (string) result value.
+    assert project.query(results={"external": "/data/external.txt"}).list() == ["run_a"]
+    # Predicate on a glob-stored array result.
+    assert project.query(results={"coef": lambda v: float(v[0]) > 1}).list() == ["run_a"]
+    assert project.query(results={"coef": lambda v: float(v[0]) > 999}).list() == []
+    # A run missing the result is excluded.
+    assert "run_b" not in project.query(results={"coef": lambda v: True}).list()
+
+
+def test_collection_where_result_value_condition(project_dir):
+    runs = sl.load_project(project_dir).runs()
+    assert runs.where(results={"external": "/data/external.txt"}).list() == ["run_a"]
+    assert runs.where(results={"coef": lambda v: float(v[-1]) == 323.0}).list() == ["run_a"]
+
+
+def test_project_query_analysis_value_and_presence(project_dir):
+    project = sl.load_project(project_dir)
+    project.get("run_a").add_analysis("fit_rmse", 0.0005)
+
+    # presence
+    assert project.query(has_analysis="fit_rmse").list() == ["run_a"]
+    assert project.query(has_analysis="missing").list() == []
+    # value predicate
+    assert project.query(analyses={"fit_rmse": lambda v: v < 0.001}).list() == ["run_a"]
+    assert project.query(analyses={"fit_rmse": lambda v: v > 1.0}).list() == []
+
+
+def test_collection_where_analysis(project_dir):
+    project = sl.load_project(project_dir)
+    project.get("run_a").add_analysis("fit_rmse", 0.0005)
+    runs = project.runs()
+    assert runs.where(has_analysis="fit_rmse").list() == ["run_a"]
+    assert runs.where(analyses={"fit_rmse": lambda v: v < 0.001}).list() == ["run_a"]
+
+
+def test_query_mixed_criteria(project_dir):
+    project = sl.load_project(project_dir)
+    project.get("run_a").add_analysis("fit_rmse", 0.0005)
+    # parameter + result predicate + analysis presence, all must hold
+    matching = project.query(
+        optimizer="adam",
+        results={"coef": lambda v: float(v[0]) > 1},
+        has_analysis="fit_rmse",
+    )
+    assert matching.list() == ["run_a"]
+
+
+# ==========================================
+#       CHEAP DIMENSIONS (metadata/tag/date/fields)
+# ==========================================
+
+
+def test_project_query_metadata(project_dir):
+    project = sl.load_project(project_dir)
+    assert project.query(metadata={"sillon.language": "python 3.13"}).list() == ["run_a"]
+    assert project.query(has_metadata="sillon.language").list() == ["run_a"]
+    assert project.query(metadata={"sillon.language": lambda v: "3.13" in v}).list() == ["run_a"]
+
+
+def test_project_query_tag(project_dir):
+    project = sl.load_project(project_dir)
+    assert project.query(tags="baseline").list() == ["run_a"]
+    assert project.query(has_tag="baseline").list() == ["run_a"]
+    assert project.query(tags="missing").list() == []
+
+
+def test_project_query_date(project_dir):
+    project = sl.load_project(project_dir)
+    # run_a is 2026-06-01, run_b is 2026-06-02
+    assert project.query(before="2026-06-02").list() == ["run_a"]
+    assert project.query(after="2026-06-02").list() == ["run_b"]
+
+
+def test_project_query_fields_status(project_dir):
+    project = sl.load_project(project_dir)
+    assert project.query(fields={"status": "SUCCESS"}).list() == ["run_a"]
+    assert project.query(fields={"status": "FAILED"}).list() == ["run_b"]
+
+
+def test_collection_where_metadata_and_tag(project_dir):
+    runs = sl.load_project(project_dir).runs()
+    assert runs.where(metadata={"sillon.language": "python 3.13"}).list() == ["run_a"]
+    assert runs.where(tags="baseline").list() == ["run_a"]
+
+
+# ==========================================
+#       TWO-PHASE OPTIMIZATION (glob-open proof)
+# ==========================================
+
+
+def test_pure_cheap_query_reads_no_globs(project_dir, monkeypatch):
+    import silloncore.engine as engine
+
+    calls = {"n": 0}
+    real = engine.read_glob_many
+
+    def counting(*a, **k):
+        calls["n"] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(engine, "read_glob_many", counting)
+
+    project = sl.load_project(project_dir)
+    # Cheap-only query (param + tag + status): must touch zero globs.
+    assert project.query(optimizer="adam", tags="baseline",
+                         fields={"status": "SUCCESS"}).list() == ["run_a"]
+    assert calls["n"] == 0
+
+
+def test_heavy_query_reads_globs_only_for_survivors(project_dir, monkeypatch):
+    import silloncore.engine as engine
+
+    seen_uuids = []
+    real = engine.read_glob_many
+
+    def tracking(storage_root, uuid, datasets):
+        seen_uuids.append(uuid)
+        return real(storage_root, uuid, datasets)
+
+    monkeypatch.setattr(engine, "read_glob_many", tracking)
+
+    project = sl.load_project(project_dir)
+    # Cheap filter (optimizer=adam) excludes run_b before any glob is opened;
+    # only run_a's glob is read for the result predicate.
+    matching = project.query(optimizer="adam", results={"coef": lambda v: float(v[0]) > 1})
+    assert matching.list() == ["run_a"]
+    assert seen_uuids == [RUN_A_UUID]
+
+
 # ==========================================
 #          FIGURES
 # ==========================================

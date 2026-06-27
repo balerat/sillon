@@ -60,6 +60,40 @@ def read_glob(storage_root, uuid, group, pointer):
         return data.decode("utf-8") if isinstance(data, bytes) else data
 
 
+def read_glob_many(storage_root, uuid, datasets):
+    """Reads several datasets from a run's glob file in a single file open.
+
+    Used by the query engine so a run's glob is opened once for all of its
+    result/analysis value conditions, rather than once per condition.
+
+    Args:
+        storage_root (str | Path): The folder containing the `glob` directory.
+        uuid (str): The unique identifier of the simulation run.
+        datasets (Iterable[tuple[str, str]]): `(group, pointer)` pairs to read.
+
+    Returns:
+        dict: Mapping of `(group, pointer)` to its value (decoded if bytes), or
+            `None` for any dataset (or whole file) that does not exist.
+    """
+    datasets = list(datasets)
+    out = {key: None for key in datasets}
+
+    g_path = Path(storage_root) / "glob" / str(uuid) / "glob.hdf5"
+    if not g_path.exists():
+        return out
+
+    with h5py.File(str(g_path), "r") as g:
+        for group, pointer in datasets:
+            dataset = f"{group}/{pointer}"
+            if dataset not in g:
+                continue
+            data = g[dataset][()]
+            out[(group, pointer)] = (
+                data.decode("utf-8") if isinstance(data, bytes) else data
+            )
+    return out
+
+
 def append_glob(storage_root, uuid, group, pointer, data):
     """Writes a dataset into a run's HDF5 glob after the run has ended.
 

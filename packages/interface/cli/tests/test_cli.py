@@ -46,8 +46,8 @@ def project(tmp_path):
                 date="2026-06-01-10:00:00",
                 parameters={"optimizer": "adam", "lr": 0.01},
                 results={"coef": "coef"},
-                meta_data={},
-                tag=[],
+                meta_data={"sillon.language": "python"},
+                tag=["prod"],
                 note=[],
                 runtime="0:00:01",
                 status="SUCCESS",
@@ -72,6 +72,16 @@ def test_search_by_parameter(project):
     engine, storage_root, _ = project
     names = search.command(engine, storage_root, {"parameter": ["optimizer=adam"]})
     assert names == ["exp"]
+
+
+def test_search_by_metadata_tag_status_date(project):
+    engine, storage_root, _ = project
+    assert search.command(engine, storage_root, {"meta": ["sillon.language=python"]}) == ["exp"]
+    assert search.command(engine, storage_root, {"tag": ["prod"]}) == ["exp"]
+    assert search.command(engine, storage_root, {"status": "SUCCESS"}) == ["exp"]
+    assert search.command(engine, storage_root, {"status": "FAILED"}) == []
+    assert search.command(engine, storage_root, {"after": "2026-05-01"}) == ["exp"]
+    assert search.command(engine, storage_root, {"before": "2026-05-01"}) == []
 
 
 def test_search_by_result_and_artifact(project):

@@ -73,8 +73,14 @@ def test_select_run_snapshot_by_uuid_and_missing(engine):
 
 def test_select_run_index(engine):
     index = {entry["name"]: entry for entry in select_run_index(engine)}
-    assert index["run_a"]["results"] == ["coef"]
+    # Rich, glob-free index: full columns + linked-item names.
+    assert index["run_a"]["result_names"] == ["coef"]
+    assert index["run_a"]["results"] == {"coef": "coef"}
     assert index["run_a"]["artifacts"] == ["mesh"]
+    assert index["run_a"]["uuid"] == "uuid-a"
+    assert index["run_a"]["status"] == "SUCCESS"
+    assert index["run_a"]["tag"] == ["baseline"]
+    assert index["run_a"]["meta_data"] == {"sillon.language": "python"}
     assert index["run_b"]["parameters"] == {"lr": 0.5}
 
 
