@@ -77,7 +77,7 @@ nav{
    or drop a <video> inside .hero-bg and it'll cover automatically */
 .hero-bg{
   position:absolute;inset:0;z-index:0;
-  background:#081320 url('wave.png') center/cover no-repeat;
+  background:#081320 url('waves_rain.gif') center/cover no-repeat;
   /* gentle drift so a static render still feels alive; remove if using video */
   animation:drift 26s ease-in-out infinite alternate;
   will-change:transform;
@@ -105,7 +105,7 @@ nav{
   margin-bottom:22px;color:#fff;
   opacity:0;animation:rise .7s .12s ease forwards;
 }
-.hero h1 .tail{color:var(--ember)}
+.hero h1 .tail{color:var(--foam)}
 .lede{
   font-size:clamp(18px,2.4vw,23px);max-width:560px;color:var(--spray);
   margin-bottom:38px;opacity:0;animation:rise .7s .2s ease forwards;
@@ -125,13 +125,13 @@ nav{
   font-family:'JetBrains Mono',monospace;transition:all .2s;align-self:stretch;
 }
 .install button:hover{color:var(--foam);background:#143150}
-.install button.copied{color:var(--ember);background:#143150}
+.install button.copied{color:var(--foam);background:#143150}
 
 /* ---------- section scaffold ---------- */
 section.block{padding:84px 0;border-top:1px solid var(--line)}
 .sec-head{display:flex;align-items:baseline;gap:16px;margin-bottom:42px}
 .sec-num{
-  font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ember);
+  font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--foam);
   letter-spacing:.1em;
 }
 .sec-title{
@@ -221,12 +221,12 @@ pre{
 .cta p{color:var(--slate);margin-bottom:32px;font-size:17px}
 .cta-btn{
   display:inline-flex;align-items:center;gap:10px;
-  background:var(--ember);color:#0A1828;font-weight:600;font-size:16px;
+  background:var(--foam);color:#0A1828;font-weight:600;font-size:16px;
   padding:15px 30px;border-radius:var(--r);transition:all .25s;
   font-family:'Space Grotesk',sans-serif;
   box-shadow:0 0 0 0 rgba(242,166,90,.4);
 }
-.cta-btn:hover{background:var(--ember-soft);gap:14px;box-shadow:0 8px 30px -6px rgba(242,166,90,.45)}
+.cta-btn:hover{background:var(--foam-soft);gap:14px;box-shadow:0 8px 30px -6px rgba(242,166,90,.45)}
 
 /* ---------- footer ---------- */
 footer{
