@@ -28,3 +28,4 @@ data/
 profiling.txt
 .idea/
 .claude/
+.envrc
