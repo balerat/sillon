@@ -14,6 +14,7 @@ from silloncore.engine import (
     add_metadata_to_runs,
     delete_run as _engine_delete_run,
     rename_run as _engine_rename_run,
+    find_children as _engine_find_children,
     fetch_run_result,
     get_run_sizes,
     export_run,
@@ -141,6 +142,22 @@ class Run:
             name: dict(analysis["meta"] or {})
             for name, analysis in self._load_snapshot()["analyses"].items()
         }
+
+    @property
+    def parents(self) -> list:
+        """Runs this run inherited/derived from (lineage).
+
+        Each entry is `{"uuid", "name", "params": [inherited param names]}`.
+        """
+        return list(self._load_snapshot().get("parents") or [])
+
+    def children(self) -> "RunCollection":
+        """Runs that inherited/derived from this run (reverse lineage)."""
+        self._load_snapshot()  # ensure self.uuid is populated
+        names = [child["name"] for child in _engine_find_children(self.engine, self.uuid)]
+        return RunCollection(
+            [Run(name=n, engine=self.engine, storage_root=self.storage_root) for n in names]
+        )
 
     # ---------------------------------------------------------
     # Loading functions

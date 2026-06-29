@@ -14,6 +14,7 @@ import silloncli.commands.report as report
 import silloncli.commands.delete as delete
 import silloncli.commands.rename as rename
 import silloncli.commands.whose as whose
+import silloncli.commands.lineage as lineage
 
 from silloncommon import __version__
 
@@ -34,6 +35,7 @@ COMMAND_LIST = {
     "delete": delete,
     "rename": rename,
     "whose": whose,
+    "lineage": lineage,
 }
 
 

@@ -936,6 +936,29 @@ def build_run_report(engine, storage_root, snapshot: dict) -> dict:
         for name, analysis in snapshot["analyses"].items()
     }
 
+    # Results are the authoritative DB list (every logged result) unioned with
+    # artifacts. We attach the stored size and, when it is cheap/meaningful, the
+    # value itself: inline results (a plain DB value, not a glob pointer) are
+    # shown directly; small glob results (scalars / tiny arrays) are loaded; big
+    # arrays and artifacts show their size only.
+    SMALL_RESULT_BYTES = 512
+    results = {}
+    for name, stored in snapshot["results"].items():
+        info = sizes.get(name, {})
+        entry = {"bytes": info.get("bytes"), "kind": "result"}
+        if stored != name:
+            # Inline value kept in the DB (e.g. an external path) — show as-is.
+            entry["value"] = stored
+        elif entry["bytes"] is not None and entry["bytes"] <= SMALL_RESULT_BYTES:
+            try:
+                entry["value"] = load_run_result(storage_root, snapshot, name)
+            except Exception:
+                pass
+        results[name] = entry
+    for name in snapshot["artifacts"]:
+        info = sizes.get(name, {})
+        results[name] = {"bytes": info.get("bytes"), "kind": "artifact"}
+
     return {
         "name": snapshot["name"],
         "uuid": snapshot["uuid"],
@@ -948,13 +971,11 @@ def build_run_report(engine, storage_root, snapshot: dict) -> dict:
         "platform": snapshot.get("platform"),
         "sillonversion": snapshot.get("sillonversion"),
         "parameters": snapshot["parameters"],
-        "results": {
-            name: {"bytes": info["bytes"], "kind": info["kind"]}
-            for name, info in sizes.items()
-        },
+        "results": results,
         "metadata": snapshot["meta_data"],
         "tags": snapshot["tag"] or [],
         "notes": snapshot["note"] or [],
+        "parents": snapshot.get("parents") or [],
         "figures": figures,
         "analyses": analyses,
     }
@@ -984,10 +1005,14 @@ def _render_report_markdown(report: dict) -> str:
 
     lines += ["", "## Results", ""]
     if report["results"]:
-        lines += [
-            f"- `{name}` ({info['kind']}, {info['bytes']} bytes)"
-            for name, info in report["results"].items()
-        ]
+        for name, info in report["results"].items():
+            if "value" in info:
+                detail = f"= `{info['value']}`"
+            elif info.get("bytes") is not None:
+                detail = f"({info['kind']}, {info['bytes']} bytes)"
+            else:
+                detail = f"({info['kind']})"
+            lines.append(f"- `{name}` {detail}")
     else:
         lines.append("_none_")
 
@@ -1009,6 +1034,13 @@ def _render_report_markdown(report: dict) -> str:
     if report["notes"]:
         lines += ["", "## Notes", ""]
         lines += [f"- {note}" for note in report["notes"]]
+
+    if report.get("parents"):
+        lines += ["", "## Inherited from", ""]
+        for parent in report["parents"]:
+            inherited = ", ".join(parent.get("params") or [])
+            suffix = f" (params: {inherited})" if inherited else ""
+            lines.append(f"- `{parent.get('name')}`{suffix}")
 
     lines.append("")
     return "\n".join(lines)
@@ -1207,6 +1239,24 @@ def find_by_hash(engine, file_or_hash) -> list:
     if os.path.isfile(token):
         token = get_hash(token)
     return select_by_hash(engine, token)
+
+
+def find_children(engine, uuid: str) -> list:
+    """Finds runs that inherited/derived from a given run (reverse lineage).
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        uuid (str): The uuid of the parent run.
+
+    Returns:
+        list[dict]: One `{"name", "uuid"}` per child run.
+    """
+    uuid = str(uuid)
+    children = []
+    for entry in select_run_index(engine):
+        if any(p.get("uuid") == uuid for p in (entry.get("parents") or [])):
+            children.append({"name": entry["name"], "uuid": entry["uuid"]})
+    return children
 
 
 def load_run_figure(storage_root, snapshot: dict, name: str) -> Path:

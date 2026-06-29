@@ -649,6 +649,53 @@ def test_run_manifest(project_dir):
     assert "coef" in manifest["results"]
 
 
+def test_run_card_shows_result_values(project_dir):
+    # Regression: the run card must show result *values*, not just name + size,
+    # and inline-stored results (value != glob pointer) must appear.
+    from silloncore.display import render_run_card, render_to_html
+
+    manifest = sl.load_project(project_dir).get("run_a").manifest()
+
+    # coef is a small glob result → its value is loaded into the manifest.
+    assert "value" in manifest["results"]["coef"]
+    assert np.allclose(manifest["results"]["coef"]["value"], [1.323, 323.0])
+
+    # external is an inline DB result → present, with its stored value.
+    assert manifest["results"]["external"]["value"] == "/data/external.txt"
+
+    # And both surface in the rendered card.
+    html = render_to_html(render_run_card(manifest))
+    assert "323" in html
+    assert "external" in html
+
+
+def test_run_card_scalar_result_value(project_dir):
+    # A scalar result renders as its value (e.g. 0.0123), not "array float64 ()".
+    from sqlmodel import select
+    from sqlalchemy.orm.attributes import flag_modified
+    from silloncore.display import render_run_card, render_to_html
+    from silloncore.engine import get_run_snapshot, build_run_report
+
+    project = sl.load_project(project_dir)
+    # Add a scalar result to run_a (glob dataset + DB pointer).
+    glob = project_dir / ".sillon" / "glob" / RUN_A_UUID / "glob.hdf5"
+    with h5py.File(glob, "a") as g:
+        g.require_group("result").create_dataset("loss", data=0.0123)
+    with Session(project.engine) as session:
+        run = session.exec(
+            select(SimulationTable).where(SimulationTable.name == "run_a")
+        ).first()
+        run.results = {**run.results, "loss": "loss"}
+        flag_modified(run, "results")
+        session.add(run)
+        session.commit()
+
+    snap = get_run_snapshot(project.engine, "run_a")
+    report = build_run_report(project.engine, project.storage_root, snap)
+    assert "0.0123" in str(report["results"]["loss"].get("value"))
+    assert "0.0123" in render_to_html(render_run_card(report))
+
+
 def test_run_report_zip_contents(project_dir, tmp_path):
     import zipfile
 

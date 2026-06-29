@@ -94,6 +94,9 @@ class SimulationTable(SQLModel, table=True):
     meta_data: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     tag: Optional[List[Any]] = Field(default_factory=list, sa_column=Column(JSON))
     note: Optional[List[Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    # Lineage: runs this run inherited/derived from. Each entry is
+    # {"uuid", "name", "params": [inherited param names]}.
+    parents: Optional[List[Any]] = Field(default_factory=list, sa_column=Column(JSON))
 
     # Execution & Environment Metadata
     runtime: Optional[str]
@@ -255,6 +258,7 @@ def insert_multiple_simulations(
             meta_data=run.metadata,
             tag=run.tags,
             note=run.notes,
+            parents=getattr(run, "parents", []),
             artifacts=run_artifacts,
             platform=run.platform,
             hostname=run.hostname,
@@ -329,6 +333,7 @@ def insert_simulation(run: "Simulation", session: Session) -> SimulationTable:
         meta_data=run.metadata,
         tag=run.tags,
         note=run.notes,
+        parents=getattr(run, "parents", []),
         artifacts=run_artifacts,
         figures=run_figures,
         platform=run.platform,
@@ -960,6 +965,7 @@ def select_run_index(engine: Engine) -> List[Dict[str, Any]]:
                     "meta_data": run.meta_data or {},
                     "tag": run.tag or [],
                     "note": run.note or [],
+                    "parents": run.parents or [],
                     "hashes": run.hashes or {},
                     "artifacts": artifacts_by_run.get(run.id, []),
                     "analyses": analyses_by_run.get(run.id, []),

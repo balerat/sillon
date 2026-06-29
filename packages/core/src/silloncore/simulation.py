@@ -91,11 +91,22 @@ def commit_status(simulation_obj, status):
     simulation_obj.status = status
 
 
+def commit_parent(simulation_obj, parent):
+    """Records a lineage edge: a run this run inherited/derived from.
+
+    Args:
+        simulation_obj (Simulation): The active simulation instance.
+        parent (dict): `{"uuid", "name", "params": [inherited param names]}`.
+    """
+    simulation_obj.parents.append(parent)
+
+
 # A lookup table to process sillon custom metadata when it arrives.
 METADATA_TABLE = {
     "sillon.main_script_source": commit_source,
     "sillon.runtime": commit_runtime,
     "sillon.status": commit_status,
+    "sillon.parent": commit_parent,
     # "sillon.isdirty": commit_isdirty,
 }
 
@@ -220,6 +231,7 @@ class Simulation:
         self.metadata: Dict[str, Any] = {}
         self.tags = []
         self.notes = []
+        self.parents = []
         self.hashes = SimHashes()
         
         self.check_name()

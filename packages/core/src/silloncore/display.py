@@ -96,20 +96,30 @@ def format_value(value, max_len: int = 60) -> str:
     than dumping the marker dict or the whole array. Everything else is the
     plain string, truncated to `max_len`.
     """
+    def _trunc(text):
+        return text if len(text) <= max_len else text[: max_len - 3] + "..."
+
     # Glob-stored array marker.
     if isinstance(value, dict) and value.get("__sillon_array_ref__"):
         return _array_repr(value.get("dtype"), value.get("shape"))
 
-    # A raw numpy array (duck-typed to avoid importing numpy here).
+    # A numpy scalar or array (duck-typed to avoid importing numpy here).
     if type(value).__module__ == "numpy" and hasattr(value, "shape"):
+        size = getattr(value, "size", None)
+        if size is not None and size <= 1:          # scalar / 0-d / single element
+            try:
+                return _trunc(str(value.item()))
+            except Exception:
+                return _trunc(str(value))
+        if size is not None and size <= 12:         # tiny array → show the values
+            return _trunc(str(value))
         return _array_repr(getattr(value, "dtype", None), list(getattr(value, "shape", ())))
 
     # A long sequence.
     if isinstance(value, (list, tuple)) and len(value) > 12:
         return f"{type(value).__name__} ({len(value)} items)"
 
-    text = str(value)
-    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+    return _trunc(str(value))
 
 
 def _array_repr(dtype, shape) -> str:
@@ -184,6 +194,14 @@ def render_run_card(report: dict):
         suffix = f" ({human_size(info['bytes'])})" if info and info.get("bytes") is not None else ""
         return Text.assemble((f"  {name}", S_VALUE), (suffix, S_DIM))
 
+    def _result_line(name, info):
+        # Show the value for small/inline results; size for big arrays/artifacts.
+        if "value" in info:
+            return Text.assemble(
+                (f"  {name}  ", S_VALUE), (format_value(info["value"]), S_ACCENT)
+            )
+        return _sized_line(name, info)
+
     lines = [
         Text.assemble(("Run id     ", S_LABEL), (short_id(report.get("uuid")), S_DIM)),
         Text.assemble(("Timestamp  ", S_LABEL), (str(report["date"]), S_DIM)),
@@ -200,7 +218,7 @@ def render_run_card(report: dict):
         for name, info in report["results"].items()
         if info.get("kind") in ("result", "artifact")
     }
-    lines += [_sized_line(n, i) for n, i in result_items.items()] or [Text("  none", style=S_DIM)]
+    lines += [_result_line(n, i) for n, i in result_items.items()] or [Text("  none", style=S_DIM)]
 
     if report["figures"]:
         lines.append(Text("Figures", style=f"bold {c('wake')}"))
@@ -224,6 +242,10 @@ def render_run_card(report: dict):
             if comment:
                 line.append(f"  ({comment})", style=S_DIM)
             lines.append(line)
+
+    if report.get("parents"):
+        parent_names = ", ".join(p.get("name", "?") for p in report["parents"])
+        lines.append(Text.assemble(("Inherits   ", S_LABEL), (parent_names, c("wake"))))
 
     if report["tags"]:
         tag_text = Text("Tags       ", style=S_LABEL)
