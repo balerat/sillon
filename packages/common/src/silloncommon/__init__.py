@@ -2,4 +2,4 @@
 
 # Single source of truth for the sillon data/format version, recorded on every
 # run (SimulationTable.sillonversion) and reused across packages.
-__version__ = "1.1.2"
+__version__ = "1.2.0"
