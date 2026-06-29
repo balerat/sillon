@@ -10,6 +10,7 @@ from anywhere in the user's codebase without passing it explicitly.
 
 from functools import wraps
 import time
+from contextlib import contextmanager
 from contextvars import ContextVar
 import atexit
 import inspect
@@ -470,3 +471,35 @@ def force_dump():
     ctx = get_context()
     ctx.close()
     set_context(None)
+
+
+# `log_metadata` is an alias of `add_metadata`, so the data-logging verbs read
+# uniformly (`log_param` / `log_result` / `log_figure` / `log_metadata`).
+log_metadata = add_metadata
+
+
+@contextmanager
+def track_run(**kwargs):
+    """Context manager that opens a run and finalizes it on exit.
+
+    Initializes the tracker on entry and flushes/closes it on exit (success or
+    error), so multi-run scripts don't have to call `force_dump()` by hand:
+
+    ```python
+    with sp.track_run(run_name="sweep-1"):
+        sp.log_param("lr", 0.01)
+        ...
+    # run is sealed here
+    ```
+
+    Args:
+        **kwargs: Forwarded to `init` (run_name, project_name, project_path, ...).
+
+    Yields:
+        Tracker: The active tracker for the run.
+    """
+    init(**kwargs)
+    try:
+        yield get_context()
+    finally:
+        force_dump()

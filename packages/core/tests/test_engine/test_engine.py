@@ -12,51 +12,77 @@ from silloncore.engine import (
 #      TESTING GET_PROJECT_CONTEXT
 # ==========================================
 
-@patch("silloncore.engine.select_all_user")
-def test_get_project_context_overview(mock_select_all):
-    """Tests overview mode formats the raw database tuples into clean dictionaries."""
-    
-    # 1. Setup the fake data the database WOULD return
-    # Tuple format based on your code: (name, timestamp, params_dict, results_dict, ..., status, id)
-    # (name, timestamp, params, results, id, runtime, status)
-    fake_runs = [
-        ("run_alpha", "2026-04-01", {"lr": 0.01}, {"loss": 0.5}, "id_111", "00:01", "SUCCESS"),
-        ("run_beta", "2026-04-02", {"lr": 0.02, "b": 32}, {}, "id_222", "00:02", "FAILED")
+def _index_entry(**overrides):
+    """A select_run_index row with sensible defaults for the context tests."""
+    entry = {
+        "id": 1,
+        "uuid": "uuid-x",
+        "name": "run_x",
+        "date": "2026-04-01",
+        "status": "SUCCESS",
+        "author": "",
+        "hostname": "",
+        "platform": "python",
+        "runtime": "00:01",
+        "sillonversion": "1.0.0",
+        "parameters": {},
+        "results": {},
+        "result_names": [],
+        "meta_data": {},
+        "tag": [],
+        "note": [],
+        "hashes": {},
+        "artifacts": [],
+        "analyses": [],
+        "figures": [],
+    }
+    entry.update(overrides)
+    return entry
+
+
+@patch("silloncore.engine.select_run_index")
+def test_get_project_context_overview(mock_index):
+    """Tests overview mode formats the run index into clean dictionaries."""
+    mock_index.return_value = [
+        _index_entry(
+            name="run_alpha", uuid="id_111", date="2026-04-01",
+            parameters={"lr": 0.01}, results={"loss": "loss"}, result_names=["loss"],
+            artifacts=["a1", "a2"], status="SUCCESS",
+        ),
+        _index_entry(
+            name="run_beta", uuid="id_222", date="2026-04-02",
+            parameters={"lr": 0.02, "b": 32}, status="FAILED",
+        ),
     ]
-    fake_artifacts = ["id_111", "id_111"]
-    
-    mock_select_all.return_value = (fake_runs, fake_artifacts)
-    
-    # 2. Execute the engine logic
-    # We can pass None for the engine because the DB call is mocked!
+
     result = get_project_context(engine=None)
-    
-    # 3. Assert the Engine transformed it correctly
+
     assert result["mode"] == "overview"
     assert len(result["runs"]) == 2
-    
-    # Check that run_alpha calculated assets and params correctly
-    run_alpha_data = result["runs"][0]
-    assert run_alpha_data["name"] == "run_alpha"
-    assert run_alpha_data["param_count"] == 1
-    assert run_alpha_data["asset_count"] == 3  # 1 result + 2 artifacts
-    assert run_alpha_data["status"] == "SUCCESS"
+
+    run_alpha = next(r for r in result["runs"] if r["name"] == "run_alpha")
+    assert run_alpha["param_count"] == 1
+    assert run_alpha["asset_count"] == 3  # 1 result + 2 artifacts
+    assert run_alpha["status"] == "SUCCESS"
+    assert run_alpha["uuid"] == "id_111"
 
 
-@patch("silloncore.engine.select_key_user")
-def test_get_project_context_specific(mock_select_key):
-    """Tests specific mode safely extracts metadata and handles missing indices."""
-    
-    # Fake run with a language inside the metadata dict at index 4
-    fake_runs = [
-        ("run_target", "2026-04-03", {}, {}, {"sillon.language": "python 3.11"}, "id_333", "00:05:22", "KILLED")
+@patch("silloncore.engine.select_run_index")
+def test_get_project_context_specific(mock_index):
+    """Tests specific mode filters the index and extracts metadata."""
+    mock_index.return_value = [
+        _index_entry(
+            name="run_target", uuid="id_333", date="2026-04-03",
+            meta_data={"sillon.language": "python 3.11"}, runtime="00:05:22",
+            status="KILLED",
+        ),
+        _index_entry(name="other", uuid="id_999"),
     ]
-    mock_select_key.return_value = (fake_runs, [])
-    
+
     result = get_project_context(engine=None, run_names=["run_target"])
-    
+
     assert result["mode"] == "specific"
-    
+    assert len(result["runs"]) == 1
     run_data = result["runs"][0]
     assert run_data["name"] == "run_target"
     assert run_data["language"] == "python 3.11"

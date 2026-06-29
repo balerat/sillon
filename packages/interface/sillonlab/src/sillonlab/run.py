@@ -13,12 +13,14 @@ from silloncore.engine import (
     add_run_analysis,
     add_metadata_to_runs,
     delete_run as _engine_delete_run,
+    rename_run as _engine_rename_run,
     fetch_run_result,
     get_run_sizes,
     export_run,
     build_run_report,
     export_run_report,
 )
+from silloncore.display import render_run_card, render_to_html
 
 from sillonlab.display import print_run, print_run_table
 
@@ -411,6 +413,22 @@ class Run:
         self._snapshot = None  # Invalidate the cache; the run is gone
         return out
 
+    def rename(self, new_name: str) -> dict:
+        """Renames the run, rejecting the rename if `new_name` is already taken.
+
+        Args:
+            new_name (str): The new run name.
+
+        Returns:
+            dict: `{"status": "success", "old": ..., "new": ...}` or an error
+                status (e.g. the name clashes with an existing run).
+        """
+        out = _engine_rename_run(self.engine, self.name, new_name)
+        if out["status"] == "success":
+            self.name = out["new"]
+            self._snapshot = None  # Invalidate the cache; name changed
+        return out
+
     # ---------------------------------------------------------
     # Display
     # ---------------------------------------------------------
@@ -418,6 +436,10 @@ class Run:
     def show(self) -> None:
         """Pretty-prints the run as a detail card (terminal or notebook)."""
         print_run(self)
+
+    def _repr_html_(self) -> str:
+        """Renders the themed run card as HTML for Jupyter."""
+        return render_to_html(render_run_card(self.manifest()))
 
     def __repr__(self):
         status = f" [{self.status}]" if self.status else ""
@@ -448,6 +470,35 @@ class RunCollection:
 
     def __repr__(self):
         return f"RunCollection({[run.name for run in self._runs]})"
+
+    def _repr_html_(self) -> str:
+        """Renders the themed summary table as HTML for Jupyter."""
+        from rich.console import Console
+
+        from silloncore.display import themed_table, status_text, short_id, relative_time, c
+
+        table = themed_table()
+        table.add_column("ID", style="dim")
+        table.add_column("Run Name")
+        table.add_column("When")
+        table.add_column("Params", justify="center")
+        table.add_column("Results", justify="center")
+        table.add_column("Tags")
+        table.add_column("Status", justify="center")
+        for run in self._runs:
+            params = run.parameters  # forces snapshot load (populates uuid)
+            table.add_row(
+                short_id(run.uuid or ""),
+                run.name,
+                relative_time(run.timestamp),
+                str(len(params)),
+                str(len(run.results)),
+                ", ".join(run.tags),
+                status_text(run.status),
+            )
+        rec = Console(record=True, width=110)
+        rec.print(table)
+        return rec.export_html(inline_styles=True)
 
     def list(self) -> List[str]:
         """Returns the names of all runs in the collection."""

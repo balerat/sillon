@@ -29,6 +29,9 @@ def add_parser(command_subparser):
         action="store_true",
         help="Also delete the database rows (default keeps metadata, drops data only).",
     )
+    prune_parser.add_argument(
+        "-y", "--yes", action="store_true", help="Skip the confirmation prompt."
+    )
 
 
 def _parse_age(raw: str):
@@ -52,12 +55,24 @@ def command(engine, storage_root, args):
             )
             return None
 
+    delete_metadata = args.get("delete_metadata", False)
+
+    # Deleting metadata is irreversible — confirm unless -y was passed.
+    if delete_metadata and not args.get("yes"):
+        console.print(
+            "[bold yellow]--delete-metadata permanently removes the database rows, "
+            "not just the stored data.[/bold yellow]"
+        )
+        if input("Continue? [y/N] ").strip().lower() not in ("y", "yes"):
+            console.print("[dim]Aborted.[/dim]")
+            return None
+
     result = prune_runs(
         engine,
         storage_root,
         run_names=args.get("run_id"),
         before=before,
-        keep_metadata=not args.get("delete_metadata", False),
+        keep_metadata=not delete_metadata,
     )
 
     if result["status"] == "error":

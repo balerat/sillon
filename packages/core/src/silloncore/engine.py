@@ -10,10 +10,13 @@ from silloncommon.database import (
     select_run_snapshot,
     select_run_index,
     select_run_identities,
+    select_by_hash,
     db_append_note_tag,
     db_append_metadata,
     db_insert_analysis,
     db_delete_runs,
+    db_rename_run,
+    next_available_name,
 )
 
 from silloncore.glob import read_glob, read_glob_many, append_glob, glob_sizes, get_hash
@@ -53,55 +56,36 @@ def get_project_context(engine, run_names: list = None) -> dict:
             }
             ```
     """
+    index = select_run_index(engine)
+    index.sort(key=lambda entry: entry["date"] or "")  # by timestamp
+
+    def _to_card(entry: dict) -> dict:
+        assets = (
+            len(entry["result_names"])
+            + len(entry["artifacts"])
+            + len(entry["figures"])
+            + len(entry["analyses"])
+        )
+        return {
+            "id": entry["uuid"],  # kept for backward-compat (now the uuid)
+            "uuid": entry["uuid"],
+            "name": entry["name"],
+            "timestamp": entry["date"],
+            "param_count": len(entry["parameters"]),
+            "asset_count": assets,
+            "status": entry["status"] or "N/A",
+            "runtime": entry["runtime"] or "N/A",
+            "language": (entry["meta_data"] or {}).get("sillon.language", "N/A"),
+        }
+
     if not run_names:
-        # --- OVERVIEW MODE (All Runs) ---
-        result, artifact = select_all_user(engine)
-        result.sort(key=lambda x: x[1])  # Sort by timestamp
+        return {"mode": "overview", "runs": [_to_card(e) for e in index]}
 
-        runs_data = []
-        for run_obj in result:
-            run_id = run_obj[4]  # <--- explicitly index 4
-            artifact_count = artifact.count(run_id)
-            total_assets = len(run_obj[3]) + artifact_count
-
-            runs_data.append(
-                {
-                    "id": run_obj[-1],
-                    "name": run_obj[0],
-                    "timestamp": run_obj[1],
-                    "param_count": len(run_obj[2]),
-                    "asset_count": total_assets,
-                    # Note: Safely accessing index 6 based on your db schema
-                    "status": run_obj[6] if len(run_obj) > 6 else "N/A",
-                }
-            )
-
-        return {"mode": "overview", "runs": runs_data}
-
-    else:
-        # --- SPECIFIC MODE (Targeted Runs) ---
-        result, artifact_list = select_key_user(engine, run_names)
-
-        runs_data = []
-        for run in result:
-            metadata_run = run[4] if isinstance(run[4], dict) else {}
-            artifact_count = artifact_list.count(run[-1])
-            total_assets = len(run[3]) + artifact_count
-
-            runs_data.append(
-                {
-                    "id": run[-1],
-                    "name": run[0],
-                    "timestamp": run[1],
-                    "param_count": len(run[2]),
-                    "asset_count": total_assets,
-                    "runtime": run[6] if len(run) > 6 else "N/A",
-                    "language": metadata_run.get("sillon.language", "N/A"),
-                    "status": run[7] if len(run) > 7 else "N/A",
-                }
-            )
-
-        return {"mode": "specific", "runs": runs_data}
+    wanted = set(run_names)
+    runs_data = [
+        _to_card(e) for e in index if e["name"] in wanted or e["uuid"] in wanted
+    ]
+    return {"mode": "specific", "runs": runs_data}
 
 
 def get_run_details(
@@ -230,16 +214,45 @@ def add_metadata_to_runs(
     }
 
 
-def get_run_snapshot(engine, run_name: str) -> dict:
-    """Fetches the complete snapshot of a single run, by name or uuid.
+def resolve_run_identifier(engine, token: str):
+    """Resolves a user token to a run's uuid: exact name, exact uuid, or prefix.
 
-    This is the data backbone for the interfaces (sillonlab, GUI...): one call
-    returns every tracked field of a run, ready to be cached and displayed.
-    Artifacts are indexed by their result name for direct lookups.
+    Lets users refer to a run by an unambiguous **uuid prefix** (e.g. `a3f9`)
+    in addition to its full name or uuid. An exact name wins, then an exact
+    uuid, then a uuid that uniquely starts with the token. Ambiguous or
+    unknown tokens resolve to None.
 
     Args:
         engine (Engine): The active SQLAlchemy database engine.
-        run_name (str): The name or uuid of the run to load.
+        token (str): The name, uuid, or uuid prefix.
+
+    Returns:
+        str | None: The matched run's uuid, or None.
+    """
+    identities = select_run_identities(engine)
+    for entry in identities:
+        if entry["name"] == token:
+            return entry["uuid"]
+    for entry in identities:
+        if entry["uuid"] == token:
+            return entry["uuid"]
+    prefix_matches = [
+        entry["uuid"] for entry in identities if str(entry["uuid"]).startswith(str(token))
+    ]
+    return prefix_matches[0] if len(prefix_matches) == 1 else None
+
+
+def get_run_snapshot(engine, run_name: str) -> dict:
+    """Fetches the complete snapshot of a single run, by name, uuid, or prefix.
+
+    This is the data backbone for the interfaces (sillonlab, GUI...): one call
+    returns every tracked field of a run, ready to be cached and displayed.
+    Artifacts are indexed by their result name for direct lookups. A unique
+    uuid prefix is accepted in addition to the full name/uuid.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        run_name (str): The name, uuid, or uuid prefix of the run to load.
 
     Returns:
         dict | None: The full run row (parameters, results, meta_data, tag,
@@ -248,6 +261,11 @@ def get_run_snapshot(engine, run_name: str) -> dict:
             or None if the run does not exist.
     """
     run, artifacts, figures, analyses = select_run_snapshot(engine, run_name)
+    if run is None:
+        # Fall back to uuid-prefix resolution.
+        resolved = resolve_run_identifier(engine, run_name)
+        if resolved is not None and resolved != run_name:
+            run, artifacts, figures, analyses = select_run_snapshot(engine, resolved)
     if run is None:
         return None
     run["artifacts"] = {artifact["name"]: artifact for artifact in artifacts}
@@ -384,6 +402,29 @@ def _match_conditions(values: dict, conditions: dict) -> bool:
     return True
 
 
+_USER_META_PREFIX = "sillon.user_metadata."
+
+
+def _meta_get(meta: dict, name: str):
+    """Looks up a metadata key, falling back to the user-metadata namespace.
+
+    `sp.add_metadata("dataset", ...)` stores under `sillon.user_metadata.dataset`,
+    so a query for the short key `dataset` should still match it.
+
+    Returns (present: bool, value).
+    """
+    if name in meta:
+        return True, meta[name]
+    namespaced = _USER_META_PREFIX + name
+    if namespaced in meta:
+        return True, meta[namespaced]
+    return False, None
+
+
+def _meta_has(meta: dict, name: str) -> bool:
+    return _meta_get(meta, name)[0]
+
+
 def _to_datetime(value):
     """Coerces a datetime or `YYYY-MM-DD[-HH:MM:SS]` string to a datetime, or None."""
     from datetime import datetime
@@ -457,7 +498,7 @@ def match_cheap(
         if name not in entry["parameters"]:
             return False
     for name in has_metadata or []:
-        if name not in entry["meta_data"]:
+        if not _meta_has(entry["meta_data"], name):
             return False
     for name in has_result or []:
         if name not in result_names:
@@ -498,7 +539,11 @@ def match_cheap(
             return False
 
     if metadata:
-        values = {n: entry["meta_data"][n] for n in metadata if n in entry["meta_data"]}
+        values = {}
+        for name in metadata:
+            present, value = _meta_get(entry["meta_data"], name)
+            if present:
+                values[name] = value
         if not _match_conditions(values, metadata):
             return False
 
@@ -1104,8 +1149,9 @@ def delete_run(engine, storage_root, run_name) -> dict:
         dict: `{"status": "success", "deleted": str, "freed_bytes": int}`, or
             `{"status": "error", "message": str}` if the run does not exist.
     """
+    resolved = resolve_run_identifier(engine, run_name) or run_name
     result = prune_runs(
-        engine, storage_root, run_names=[run_name], keep_metadata=False
+        engine, storage_root, run_names=[resolved], keep_metadata=False
     )
     if not result["pruned"]:
         return {"status": "error", "message": f"Run '{run_name}' not found."}
@@ -1114,6 +1160,53 @@ def delete_run(engine, storage_root, run_name) -> dict:
         "deleted": result["pruned"][0],
         "freed_bytes": result["freed_bytes"],
     }
+
+
+def rename_run(engine, run_name: str, new_name: str) -> dict:
+    """Renames a run, rejecting the rename if the new name is already taken.
+
+    Storage is uuid-based, so this is a pure metadata update.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        run_name (str): The current name, uuid, or uuid prefix of the run.
+        new_name (str): The desired new name.
+
+    Returns:
+        dict: `{"status": "success", "old": ..., "new": ...}`, or
+            `{"status": "error", "message": ...}` if the run is missing or the
+            new name clashes with an existing run.
+    """
+    resolved = resolve_run_identifier(engine, run_name)
+    if resolved is None:
+        return {"status": "error", "message": f"Run '{run_name}' not found."}
+    if next_available_name(engine, new_name) != new_name:
+        return {"status": "error", "message": f"The name '{new_name}' is already taken."}
+
+    renamed = db_rename_run(engine, resolved, new_name)
+    return {"status": "success", "old": renamed["old"], "new": renamed["new"]}
+
+
+def find_by_hash(engine, file_or_hash) -> list:
+    """Finds which run(s) own a file, by content hash.
+
+    If given an existing file path, the file is hashed (`get_hash`); otherwise
+    the argument is treated as a hash directly. Looks the hash up across the
+    stored figures and artifacts.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        file_or_hash (str | Path): A file path or a SHA-256 hash.
+
+    Returns:
+        list[dict]: One `{run_name, run_uuid, kind, name}` per match.
+    """
+    import os
+
+    token = str(file_or_hash)
+    if os.path.isfile(token):
+        token = get_hash(token)
+    return select_by_hash(engine, token)
 
 
 def load_run_figure(storage_root, snapshot: dict, name: str) -> Path:

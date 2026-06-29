@@ -12,6 +12,10 @@ import silloncli.commands.grab as grab
 import silloncli.commands.prune as prune
 import silloncli.commands.report as report
 import silloncli.commands.delete as delete
+import silloncli.commands.rename as rename
+import silloncli.commands.whose as whose
+
+from silloncommon import __version__
 
 
 '''
@@ -28,6 +32,8 @@ COMMAND_LIST = {
     "prune": prune,
     "report": report,
     "delete": delete,
+    "rename": rename,
+    "whose": whose,
 }
 
 
@@ -69,10 +75,23 @@ def cli():
     their name space to launch the command the user want to use and a function add_parser.
     """
 
+    # -- Initialise the parsers (before the project check, so --version /
+    #    --help work from anywhere) -- #
+    parser = argparse.ArgumentParser(
+        prog="sillon",
+        description="Git for simulations — explore your logged runs.",
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"sillon {__version__}"
+    )
+    # Not required: a bare `sillon` falls back to the project overview.
+    command_subparser = parser.add_subparsers(dest="command", required=False)
+    init_parsers(command_subparser)
+
+    args = parser.parse_args()
+
     # -- Getting the Path -- #
     project_dir = Path.cwd()
-
-    # Handling the case if the user is in the wrong directory:
     if not (project_dir / ".sillon").exists():
         print("Not in a sillon project.")
         sys.exit(1)
@@ -81,20 +100,11 @@ def cli():
     engine = resolve_engine(project_dir)
     storage_root = resolve_storage_root(project_dir)
 
-    # -- Initialise the parsers -- #
-    parser = argparse.ArgumentParser(
-        prog="silloncli",
-        usage="The command line tool to acces sillon logged data",
-        epilog="version 0.0.1",
-    )
-    command_subparser = parser.add_subparsers(dest="command", required=True)
+    # -- Execute the command (default to the context overview) -- #
+    if args.command is None:
+        context.command(engine, storage_root, {"run_name": []})
+        return
 
-    init_parsers(command_subparser)
-
-    # -- Parse the user arguments -- #
-    args = parser.parse_args()
-
-    # -- Execute the command -- #
     command_launcher(engine, storage_root, args)
 
 

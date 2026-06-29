@@ -3,7 +3,9 @@ from silloncore.engine import add_metadata_to_runs
 
 def add_parser(command_subparser):
     # -- Parser for the add command -- #
-    add_parser = command_subparser.add_parser("add")
+    add_parser = command_subparser.add_parser(
+        "add", help="Attach notes or tags to runs."
+    )
     add_parser.add_argument(
         "run_name",
         nargs="*",

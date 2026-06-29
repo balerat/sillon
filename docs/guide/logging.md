@@ -70,11 +70,13 @@ already-saved image with `path="figure.png"`.
 
 ```python
 sp.add_metadata("dataset", "mnist")          # or a dict
+sp.log_metadata("epochs", 100)                 # log_metadata is an alias of add_metadata
 sp.add_tag("baseline")                         # or a list of tags
 sp.add_note("first attempt with the new solver")
 ```
 
-These are all stored in the database and are cheap to [query](analysis.md) later.
+These are all stored in the database and are cheap to [query](analysis.md) later (metadata can
+be queried by its short key, e.g. `project.query(metadata={"dataset": "mnist"})`).
 
 ## Tracking a function
 
@@ -90,7 +92,17 @@ def run_experiment(lr, epochs):
 ## Finishing a run
 
 A run is finalized (runtime, status, source committed, data flushed) automatically when your
-script exits. To finalize early — e.g. to log several runs in one script — call:
+script exits. To log several runs in one script, the cleanest option is the `track_run` context
+manager, which seals the run when the block ends:
+
+```python
+with sp.track_run(run_name="sweep-1", project_name="demo"):
+    sp.log_param("lr", 0.01)
+    ...
+# run is sealed here; the next `with sp.track_run(...)` starts a fresh one
+```
+
+You can also finalize manually with `force_dump()`:
 
 ```python
 from sillonpy.api import force_dump

@@ -1089,6 +1089,73 @@ def check_hashes_exists(input_hash: str, engine: Engine) -> Optional[Tuple[str, 
             return results.path, results.hsh
 
 
+def select_by_hash(engine: Engine, hsh: str) -> List[Dict[str, Any]]:
+    """Finds every figure or artifact whose content hash matches `hsh`.
+
+    Answers "which run owns this file?" — figure and artifact hashes are stored
+    and indexed, so a file hashed with `get_hash` can be traced back to its run.
+
+    Args:
+        engine (Engine): The SQLAlchemy engine.
+        hsh (str): The SHA-256 hash to look up.
+
+    Returns:
+        List[dict]: One `{run_name, run_uuid, kind, name}` per match (`kind`
+            is "figure" or "artifact").
+    """
+    matches: List[Dict[str, Any]] = []
+    with Session(engine) as session:
+        for kind, table in (("figure", FigureTable), ("artifact", ArtifactTable)):
+            try:
+                rows = session.exec(
+                    select(table.name, SimulationTable.name, SimulationTable.uuid)
+                    .join(SimulationTable, table.run_id == SimulationTable.id)
+                    .where(table.hsh == hsh)
+                ).all()
+            except OperationalError:
+                continue  # table absent in an older database
+            for item_name, run_name, run_uuid in rows:
+                matches.append(
+                    {
+                        "run_name": run_name,
+                        "run_uuid": run_uuid,
+                        "kind": kind,
+                        "name": item_name,
+                    }
+                )
+    return matches
+
+
+def db_rename_run(engine: Engine, identifier: str, new_name: str) -> Optional[Dict[str, str]]:
+    """Renames a run (matched by name or uuid) to `new_name`.
+
+    Storage is uuid-based, so a rename is a pure metadata update.
+
+    Args:
+        engine (Engine): The SQLAlchemy engine.
+        identifier (str): The current run name or uuid.
+        new_name (str): The new name.
+
+    Returns:
+        dict | None: `{"old": ..., "new": ...}` on success, or None if no run
+            matched `identifier`.
+    """
+    with Session(engine) as session:
+        run = session.exec(
+            select(SimulationTable).where(
+                (SimulationTable.name == identifier)
+                | (SimulationTable.uuid == identifier)
+            )
+        ).first()
+        if run is None:
+            return None
+        old = run.name
+        run.name = new_name
+        session.add(run)
+        session.commit()
+        return {"old": old, "new": new_name}
+
+
 # ==========================================
 #     WRITE OPERATIONS
 # ==========================================

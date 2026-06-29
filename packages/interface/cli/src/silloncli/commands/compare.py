@@ -1,85 +1,73 @@
-from rich.console import Console
 from rich.syntax import Syntax
-from rich.table import Table
+
 from silloncore.engine import compare
+from silloncore.display import console, themed_table, format_value, c
 
 
 def add_parser(command_subparser):
-    # -- Parser for the add command -- #
-    add_parser = command_subparser.add_parser("compare")
-    add_parser.add_argument(
+    compare_parser = command_subparser.add_parser(
+        "compare", help="Diff two runs (parameters, context, and source)."
+    )
+    compare_parser.add_argument(
         "run_name",
         nargs="+",
         type=str,
-        help="The UUIDs, IDs, or names of the runs",
+        help="The two run names or uuids to compare.",
     )
 
 
 def command(engine, storage_root, args):
-    """CLI Compare command (just working now for 2 sim with their dates)"""
-    console = Console()
-
+    """CLI Compare command — themed parameter / context / source diff."""
     if len(args.get("run_name")) != 2:
-        raise ValueError("Please give two run name")
-    else:
-        run1, run2 = args.get("run_name")
+        raise ValueError("Please give two run names")
+    run1, run2 = args.get("run_name")
 
     result = compare(engine, run1, run2)
-
     if result["status"] != "success":
-        raise ValueError("[CLI]: compare is no_success")
-    syntax_source_diff = Syntax(
-        result["diff_source"], "diff", theme="monokai", line_numbers=True
-    )
-    console.rule(f"[bold cyan]Comparing: {run1} vs {run2}[/bold cyan]")
+        raise ValueError("[CLI]: compare did not succeed")
 
-    # 2. Pretty Parameters Table
+    console.rule(f"[bold {c('foam')}]Comparing: {run1} vs {run2}[/]")
+
     diff_param = result.get("diff_param")
     if diff_param:
         added = diff_param.get("diff_key_added", set())
         removed = diff_param.get("diff_key_removed", set())
-
-        # Filter out keys that returned None (meaning no actual difference)
         changed = {
             k: v for k, v in diff_param.get("diff_data", {}).items() if v is not None
         }
 
-        # Only draw the table if there is actual data
         if added or removed or changed:
-            table = Table(show_header=True, header_style="bold magenta")
-            table.add_column("Parameter", style="cyan")
+            table = themed_table()
+            table.add_column("Parameter", style=c("foam"))
             table.add_column("State", style="bold")
-            table.add_column("Details", style="white")
+            table.add_column("Details", style=c("spray"))
 
             for key in added:
-                table.add_row(key, "[green]+ Added[/green]", "")
+                table.add_row(key, "[#6FCF8E]+ added[/]", "")
             for key in removed:
-                table.add_row(key, "[red]- Removed[/red]", "")
+                table.add_row(key, "[#E06C75]- removed[/]", "")
             for key, val in changed.items():
-                # val is expected to be a tuple (old, new, percent) from your previous logic
                 table.add_row(
-                    key, "[yellow]~ Changed[/yellow]", f"{val[0]} -> {val[1]}"
+                    key,
+                    f"[{c('ember')}]~ changed[/]",
+                    f"{format_value(val[0])} → {format_value(val[1])}",
                 )
-
             console.print(table)
         else:
-            console.print("[dim]Parameters are identical.[/dim]")
+            console.print(f"[{c('slate')}]Parameters are identical.[/]")
+
     diff_status = result.get("diff_status")
     diff_runtime = result.get("diff_runtime")
-
     if diff_status or diff_runtime:
-        console.print("\n[bold yellow]Context Differences:[/bold yellow]")
+        console.print(f"\n[bold {c('ember')}]Context differences:[/]")
         if diff_status:
-            console.print(f"  • Status:  {diff_status[0]} -> {diff_status[1]}")
+            console.print(f"  • Status:  {diff_status[0]} → {diff_status[1]}")
         if diff_runtime:
-            console.print(f"  • Runtime: {diff_runtime[0]} -> {diff_runtime[1]}")
+            console.print(f"  • Runtime: {diff_runtime[0]} → {diff_runtime[1]}")
 
     diff_source = result.get("diff_source", "")
     if diff_source and diff_source.strip():
-        console.rule("[bold red]Source Code Diff[/bold red]")
-        syntax_source_diff = Syntax(
-            diff_source, "diff", theme="monokai", line_numbers=True
-        )
-        console.print(syntax_source_diff)
+        console.rule(f"[bold {c('wake')}]Source code diff[/]")
+        console.print(Syntax(diff_source, "diff", theme="monokai", line_numbers=True))
     else:
-        console.print("\n[dim]Source code is identical.[/dim]")
+        console.print(f"\n[{c('slate')}]Source code is identical.[/]")

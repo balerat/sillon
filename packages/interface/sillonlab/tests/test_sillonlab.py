@@ -731,3 +731,114 @@ def test_collection_show(project_dir, capsys):
     out = capsys.readouterr().out
     assert "run_a" in out
     assert "run_b" in out
+
+
+# ==========================================
+#          POLISH: rename
+# ==========================================
+
+
+def test_run_rename(project_dir):
+    project = sl.load_project(project_dir)
+    run = project.get("run_a")
+    out = run.rename("renamed_a")
+    assert out["status"] == "success"
+    assert out["old"] == "run_a" and out["new"] == "renamed_a"
+    assert run.name == "renamed_a"
+    assert sorted(project.runs().list()) == ["renamed_a", "run_b"]
+
+
+def test_rename_rejects_existing_name(project_dir):
+    project = sl.load_project(project_dir)
+    out = project.rename("run_a", "run_b")  # run_b already exists
+    assert out["status"] == "error"
+    assert "taken" in out["message"]
+    assert sorted(project.runs().list()) == ["run_a", "run_b"]
+
+
+def test_rename_missing_run(project_dir):
+    out = sl.load_project(project_dir).rename("ghost", "x")
+    assert out["status"] == "error"
+
+
+# ==========================================
+#          POLISH: find-by-hash
+# ==========================================
+
+
+def test_find_by_hash_figure_and_artifact(project_dir):
+    project = sl.load_project(project_dir)
+    # The fixture's figure 'fit' has hsh 'fig456'; artifact 'mesh' has 'abc123'.
+    fig_matches = project.find_by_hash("fig456")
+    assert fig_matches == [
+        {"run_name": "run_a", "run_uuid": RUN_A_UUID, "kind": "figure", "name": "fit"}
+    ]
+    art_matches = project.find_by_hash("abc123")
+    assert art_matches[0]["kind"] == "artifact"
+    assert art_matches[0]["name"] == "mesh"
+    assert project.find_by_hash("nope") == []
+
+
+def test_find_by_hash_from_file(project_dir, tmp_path):
+    # Hashing a real file: write content, compute its hash, store an artifact with it.
+    from sqlmodel import select
+    from silloncore.glob import get_hash
+
+    f = tmp_path / "blob.bin"
+    f.write_bytes(b"hello sillon")
+    h = get_hash(str(f))
+    engine = sl.load_project(project_dir).engine
+    with Session(engine) as session:
+        run = session.exec(
+            select(SimulationTable).where(SimulationTable.name == "run_b")
+        ).first()
+        session.add(ArtifactTable(name="blob", hsh=h, path="p", run_id=run.id))
+        session.commit()
+    matches = sl.load_project(project_dir).find_by_hash(str(f))
+    assert matches[0]["run_name"] == "run_b" and matches[0]["name"] == "blob"
+
+
+# ==========================================
+#          POLISH: uuid-prefix lookup
+# ==========================================
+
+
+def test_get_by_uuid_and_ambiguous_prefix(project_dir):
+    project = sl.load_project(project_dir)
+    # Exact uuid resolves.
+    assert project.get(RUN_A_UUID).name == "run_a"
+    # The two fixture uuids share their first 35 chars, so a short prefix is
+    # ambiguous and must be rejected rather than guessed.
+    with pytest.raises(LookupError):
+        project.get("11111111")
+
+
+# ==========================================
+#          POLISH: notebook repr + metadata short key + dropped log alias
+# ==========================================
+
+
+def test_run_repr_html(project_dir):
+    html = sl.load_project(project_dir).get("run_a")._repr_html_()
+    assert "<" in html and "run_a" in html
+
+
+def test_collection_repr_html(project_dir):
+    html = sl.load_project(project_dir).runs()._repr_html_()
+    assert "run_a" in html and "run_b" in html
+
+
+def test_query_metadata_short_key(project_dir):
+    # Runs logged via sillonpy store user metadata namespaced as
+    # 'sillon.user_metadata.<key>'; a query for the short key must still match.
+    project = sl.load_project(project_dir)
+    project.get("run_a").add_metadata("sillon.user_metadata.dataset", "mnist")
+    assert project.query(metadata={"dataset": "mnist"}).list() == ["run_a"]
+    assert project.query(has_metadata="dataset").list() == ["run_a"]
+
+
+def test_sillonpy_log_metadata_is_alias():
+    import sillonpy as sp
+
+    assert sp.log_metadata is sp.add_metadata
+    assert hasattr(sp, "track_run")

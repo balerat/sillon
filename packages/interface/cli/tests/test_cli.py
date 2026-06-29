@@ -151,3 +151,82 @@ def test_add_and_show(project, capsys):
     )
     out = capsys.readouterr().out
     assert "optimizer" in out
+
+
+# ==========================================
+#          POLISH: new commands + flags
+# ==========================================
+
+import silloncli.commands.rename as rename
+import silloncli.commands.whose as whose
+import silloncli.commands.context as context
+
+
+def test_show_full_card(project, capsys):
+    engine, storage_root, _ = project
+    # No section flag -> the full themed run card.
+    show.command(engine, storage_root, {"run_name": ["exp"]})
+    out = capsys.readouterr().out
+    assert "exp" in out
+    assert "Results" in out
+
+
+def test_show_unknown_run(project, capsys):
+    engine, storage_root, _ = project
+    show.command(engine, storage_root, {"run_name": ["ghost"]})
+    out = capsys.readouterr().out
+    assert "not found" in out
+
+
+def test_show_by_uuid_prefix(project, capsys):
+    engine, storage_root, _ = project
+    # The fixture run's uuid is 'cli-uuid-a'; a unique prefix resolves it.
+    show.command(engine, storage_root, {"run_name": ["cli-uuid"]})
+    out = capsys.readouterr().out
+    assert "exp" in out
+    assert "Results" in out
+
+
+def test_rename_command(project, capsys):
+    engine, storage_root, _ = project
+    result = rename.command(engine, storage_root, {"run_name": "exp", "new_name": "exp_renamed"})
+    assert result["status"] == "success"
+    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == ["exp_renamed"]
+
+
+def test_rename_command_rejects_clash(project, capsys):
+    engine, storage_root, _ = project
+    # rename exp -> exp (itself) is treated as taken -> error, run unchanged
+    result = rename.command(engine, storage_root, {"run_name": "exp", "new_name": "exp"})
+    assert result["status"] == "error"
+
+
+def test_whose_command(project, capsys):
+    engine, storage_root, _ = project
+    matches = whose.command(engine, storage_root, {"file": "h"})  # artifact 'mesh' hsh is 'h'
+    assert matches[0]["run_name"] == "exp"
+    assert matches[0]["name"] == "mesh"
+
+
+def test_whose_unknown(project, capsys):
+    engine, storage_root, _ = project
+    assert whose.command(engine, storage_root, {"file": "nope"}) == []
+
+
+def test_context_overview_themed(project, capsys):
+    engine, storage_root, _ = project
+    context.command(engine, storage_root, {"run_name": []})
+    out = capsys.readouterr().out
+    assert "exp" in out
+
+
+def test_prune_delete_metadata_with_yes(project):
+    engine, storage_root, base = project
+    result = prune.command(
+        engine, storage_root,
+        {"run_id": ["exp"], "older_than": None, "delete_metadata": True, "yes": True},
+    )
+    assert result["status"] == "success"
+    assert not result["kept_metadata"]
+    # fully gone from the DB
+    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == []

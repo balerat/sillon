@@ -8,6 +8,8 @@ from silloncore.engine import (
     add_metadata_to_runs,
     query_runs,
     delete_run as engine_delete_run,
+    rename_run as engine_rename_run,
+    find_by_hash as engine_find_by_hash,
     compare as engine_compare,
 )
 
@@ -287,6 +289,34 @@ class Project:
         """
         name = run.name if isinstance(run, Run) else run
         return engine_delete_run(self.engine, self.storage_root, name)
+
+    def rename(self, run, new_name: str) -> dict:
+        """Renames a run, rejecting the rename if `new_name` is already taken.
+
+        Args:
+            run (Run | str): A `Run` handle, or the run name/uuid to rename.
+            new_name (str): The new run name.
+
+        Returns:
+            dict: `{"status": "success", "old": ..., "new": ...}` or an error
+                status.
+        """
+        name = run.name if isinstance(run, Run) else run
+        return engine_rename_run(self.engine, name, new_name)
+
+    def find_by_hash(self, file_or_hash) -> list:
+        """Finds which run(s) own a file, by its content hash.
+
+        Pass a file path (it gets hashed) or a hash string. Useful to trace a
+        stray figure/artifact back to the run that produced it.
+
+        Args:
+            file_or_hash (str | Path): A file path or a SHA-256 hash.
+
+        Returns:
+            list[dict]: One `{run_name, run_uuid, kind, name}` per match.
+        """
+        return engine_find_by_hash(self.engine, file_or_hash)
 
     def compare(self, run_name1: str, run_name2: str) -> dict:
         """Diffs two runs (parameters, context, source), like `sillon compare`.
