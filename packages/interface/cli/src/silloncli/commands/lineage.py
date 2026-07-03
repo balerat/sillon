@@ -27,9 +27,7 @@ def command(engine, storage_root, args):
     lines.append(Text("Inherited from", style=f"bold {c('wake')}"))
     if parents:
         for p in parents:
-            inherited = ", ".join(p.get("params") or [])
-            suffix = f"  (params: {inherited})" if inherited else ""
-            lines.append(Text.assemble((f"  ↑ {p.get('name')}", S_VALUE), (suffix, S_DIM)))
+            lines.append(Text(f"  ↑ {p.get('name')}", style=S_VALUE))
     else:
         lines.append(Text("  (none)", style=S_DIM))
 

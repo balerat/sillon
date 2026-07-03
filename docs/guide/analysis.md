@@ -102,6 +102,17 @@ run.report("my_fit_report.zip", with_data=True)   # manifest + readable report +
 run.manifest()                           # the same report as a dict
 ```
 
+## Lineage
+
+When a run was started with `sp.init(inherit=...)`, only the relationship is stored (nothing is
+copied). It's queryable from both ends, as walkable `Run` handles:
+
+```python
+run.parents()      # runs this run derives from — e.g. run.parents()[0].load_parameter("lr")
+run.children()     # runs that derive from this one
+run.parent_links() # the raw [{"uuid", "name"}] edges
+```
+
 ## Comparing and deleting
 
 ```python

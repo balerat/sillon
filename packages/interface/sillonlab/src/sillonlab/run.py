@@ -143,16 +143,23 @@ class Run:
             for name, analysis in self._load_snapshot()["analyses"].items()
         }
 
-    @property
-    def parents(self) -> list:
-        """Runs this run inherited/derived from (lineage).
+    def parents(self) -> "RunCollection":
+        """Runs this run derives from (lineage) — as walkable `Run` handles.
 
-        Each entry is `{"uuid", "name", "params": [inherited param names]}`.
+        Inheritance copies nothing; it only records the link. Walk back to read
+        a parent's parameters, e.g. `run.parents()[0].load_parameter("lr")`.
         """
+        names = [p["name"] for p in (self._load_snapshot().get("parents") or [])]
+        return RunCollection(
+            [Run(name=n, engine=self.engine, storage_root=self.storage_root) for n in names]
+        )
+
+    def parent_links(self) -> list:
+        """The raw parent edges (`[{"uuid", "name"}, ...]`)."""
         return list(self._load_snapshot().get("parents") or [])
 
     def children(self) -> "RunCollection":
-        """Runs that inherited/derived from this run (reverse lineage)."""
+        """Runs that derive from this run (reverse lineage), as `Run` handles."""
         self._load_snapshot()  # ensure self.uuid is populated
         names = [child["name"] for child in _engine_find_children(self.engine, self.uuid)]
         return RunCollection(

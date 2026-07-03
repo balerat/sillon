@@ -30,6 +30,38 @@ if TYPE_CHECKING:
 from silloncommon import __version__ as sillon_VERSION
 
 
+def migrate_schema(engine: Engine) -> Engine:
+    """Brings an existing database up to the current schema, idempotently.
+
+    Creates any missing tables and adds any columns present on the ORM models
+    but missing from an older `simulationtable` (e.g. `parents`), so databases
+    created by earlier versions keep working without a manual migration.
+
+    Args:
+        engine (Engine): The SQLAlchemy engine to migrate.
+
+    Returns:
+        Engine: The same engine (for chaining).
+    """
+    SQLModel.metadata.create_all(engine)
+    try:
+        with engine.begin() as conn:
+            existing = {
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(simulationtable)")
+            }
+            if existing:  # table exists (older DB) — add any missing columns
+                for col in SimulationTable.__table__.columns:
+                    if col.name not in existing:
+                        coltype = "JSON" if isinstance(col.type, JSON) else "TEXT"
+                        conn.exec_driver_sql(
+                            f"ALTER TABLE simulationtable ADD COLUMN {col.name} {coltype}"
+                        )
+    except OperationalError:
+        pass  # best-effort; a brand-new DB is already fully created above
+    return engine
+
+
 def get_engine(project_path: Path) -> Engine:
     """Initializes and returns the SQLite database engine.
 
@@ -39,11 +71,15 @@ def get_engine(project_path: Path) -> Engine:
     Returns:
         Engine: A SQLAlchemy engine connected to `.sillon/database.sql`.
     """
-    return create_engine("sqlite:///" + str(project_path / ".sillon" / "database.sql"))
+    return migrate_schema(
+        create_engine("sqlite:///" + str(project_path / ".sillon" / "database.sql"))
+    )
 
 
 def create_default_engine(project_path):
-    return create_engine("sqlite:///" + str(project_path / ".sillon" / "database.sql"))
+    return migrate_schema(
+        create_engine("sqlite:///" + str(project_path / ".sillon" / "database.sql"))
+    )
 
 def create_default_engine_root(project_root):
     return create_engine("sqlite:///" + str(project_root / "database.sql"))

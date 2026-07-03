@@ -889,3 +889,77 @@ def test_sillonpy_log_metadata_is_alias():
 
     assert sp.log_metadata is sp.add_metadata
     assert hasattr(sp, "track_run")
+
+
+# ==========================================
+#          LINEAGE (run inheritance)
+# ==========================================
+
+
+def _set_parent(engine, child_name, parent_uuid, parent_name):
+    from sqlmodel import select
+    from sqlalchemy.orm.attributes import flag_modified
+
+    with Session(engine) as session:
+        run = session.exec(
+            select(SimulationTable).where(SimulationTable.name == child_name)
+        ).first()
+        run.parents = [{"uuid": parent_uuid, "name": parent_name}]
+        flag_modified(run, "parents")
+        session.add(run)
+        session.commit()
+
+
+def test_run_parents_and_children(project_dir):
+    project = sl.load_project(project_dir)
+    # Make run_b a child of run_a — lineage only, nothing copied.
+    _set_parent(project.engine, "run_b", RUN_A_UUID, "run_a")
+
+    child = project.get("run_b")
+    # parents() are walkable Run handles; raw edges via parent_links().
+    assert child.parents().list() == ["run_a"]
+    assert child.parent_links() == [{"uuid": RUN_A_UUID, "name": "run_a"}]
+    # run_b logged its own params; nothing was inherited/duplicated.
+    assert "optimizer" not in child.parameters
+    # Walk back to read a parent's parameter.
+    assert child.parents()[0].load_parameter("optimizer") == "adam"
+    # Reverse lineage.
+    assert project.get("run_a").children().list() == ["run_b"]
+    # run_a has no parents.
+    assert project.get("run_a").parents().list() == []
+
+
+def test_lineage_in_manifest_and_card(project_dir):
+    from silloncore.display import render_run_card, render_to_html
+
+    project = sl.load_project(project_dir)
+    _set_parent(project.engine, "run_b", RUN_A_UUID, "run_a")
+
+    manifest = project.get("run_b").manifest()
+    assert manifest["parents"][0]["name"] == "run_a"
+    # The card surfaces the parent ("Inherits ... run_a").
+    html = render_to_html(render_run_card(manifest))
+    assert "run_a" in html
+
+
+def test_migrate_schema_adds_parents_column(tmp_path):
+    # Simulate an old DB whose simulationtable predates the `parents` column.
+    from sqlalchemy import create_engine as _ce
+    from silloncommon.database import migrate_schema, select_run_index
+
+    db = tmp_path / "old.sql"
+    eng = _ce("sqlite:///" + str(db))
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE simulationtable (id INTEGER PRIMARY KEY, uuid TEXT, name TEXT,"
+            " parameters JSON, results JSON, meta_data JSON, tag JSON, note JSON,"
+            " hashes JSON)"
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO simulationtable (uuid, name, parameters, results, meta_data,"
+            " tag, note, hashes) VALUES ('u1','old', '{}','{}','{}','[]','[]','{}')"
+        )
+    migrate_schema(eng)  # must add the missing `parents` column (and others)
+    index = select_run_index(eng)
+    assert index[0]["name"] == "old"
+    assert index[0]["parents"] == []

@@ -63,6 +63,9 @@ sillon rename [run_id] [new_name]
 ```bash
 # Hash a file (e.g. a stray figure) and report which run + figure/artifact owns it
 sillon whose path/to/figure.png
+
+# Show a run's lineage: what it inherited from and what derives from it
+sillon lineage [run_id]
 ```
 
 ## Retrieving, reporting, and cleanup

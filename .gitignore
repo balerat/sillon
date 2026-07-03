@@ -1,4 +1,6 @@
 # Python Artifacts
+*.pyc
+*.sillon
 __pycache__/
 *.py[cod]
 *.egg-info/

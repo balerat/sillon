@@ -77,7 +77,6 @@ def init(
     project_name: Optional[str] = None,
     project_path: Optional[Union[str, Path]] = None,
     inherit: Optional[Any] = None,
-    inherit_params: bool = True,
 ):
     """Initializes the Tracker for the current script.
 
@@ -90,12 +89,11 @@ def init(
         author (str, optional): The name of the person running the simulation. Defaults to None.
         project_name (str, optional): The project grouping this simulation belongs to. Defaults to None.
         project_path (str | Path, optional): The absolute or relative path to the project root. Defaults to None.
-        inherit (Run | str, optional): A previous run to inherit from — a
+        inherit (Run | str, optional): A previous run this run derives from — a
             `sillonlab.Run` (loaded via `sillonlab`) or a run name/uuid in the
-            same project. Its parameters are copied onto this run (unless
-            `inherit_params=False`) and a lineage link to it is recorded.
-        inherit_params (bool): Copy the inherited run's parameters onto this
-            run. Defaults to True.
+            same project. **Only a lineage link is recorded** (nothing is
+            copied); walk back to the parent later via `run.parents` to read
+            its parameters. The parent must already exist in the project.
     """
     if get_context() is None:
         simulation_tracker = Tracker(
@@ -108,49 +106,35 @@ def init(
         set_context(simulation_tracker)
 
         if inherit is not None:
-            _inherit_from(inherit, inherit_params)
+            _link_parent(inherit)
 
 
-def _inherit_from(source: Any, inherit_params: bool = True):
-    """Inherits a previous run's parameters and records the lineage link.
+def _link_parent(source: Any):
+    """Records a lineage edge to a previous run — without copying any data.
 
-    `source` is either a `sillonlab.Run` (duck-typed: exposes `parameters`,
-    `load_parameter`, `uuid`, `name`) or a run name/uuid string resolved against
-    the current project. Inherited parameter *values* are re-logged onto the new
-    run (big arrays included), and a `{"uuid", "name", "params": [...]}` parent
-    edge is recorded.
+    `source` is a `sillonlab.Run` (exposes `uuid`/`name`) or a run name/uuid
+    string. It is resolved against the current project (validating it exists)
+    and a `{"uuid", "name"}` parent edge is recorded on this run. Each run still
+    logs its own parameters; lineage is purely a queryable relationship.
     """
     ctx = get_context()
 
-    if hasattr(source, "load_parameter") and hasattr(source, "uuid"):
-        # A sillonlab Run handle.
-        parent_uuid, parent_name = source.uuid, source.name
-        names = list(source.parameters.keys()) if inherit_params else []
-        loader = source.load_parameter
-    elif isinstance(source, str):
-        # A run name / uuid in the current project.
-        from silloncore.project_paths import resolve_engine, resolve_storage_root
-        from silloncore.engine import get_run_snapshot, load_run_parameter
-
-        engine = resolve_engine(ctx.project_path)
-        storage_root = resolve_storage_root(ctx.project_path)
-        snapshot = get_run_snapshot(engine, source)
-        if snapshot is None:
-            raise ValueError(f"inherit: run '{source}' not found in the project.")
-        parent_uuid, parent_name = snapshot["uuid"], snapshot["name"]
-        names = list(snapshot["parameters"].keys()) if inherit_params else []
-        loader = lambda name: load_run_parameter(storage_root, snapshot, name)
+    if isinstance(source, str):
+        identifier = source
+    elif hasattr(source, "uuid") or hasattr(source, "name"):
+        identifier = getattr(source, "uuid", None) or getattr(source, "name", None)
     else:
-        raise TypeError(
-            "inherit must be a sillonlab Run or a run name/uuid string."
-        )
+        raise TypeError("inherit must be a sillonlab Run or a run name/uuid string.")
 
-    for name in names:
-        log_param(name, loader(name))
+    from silloncore.project_paths import resolve_engine
+    from silloncore.engine import get_run_snapshot
+
+    snapshot = get_run_snapshot(resolve_engine(ctx.project_path), identifier)
+    if snapshot is None:
+        raise ValueError(f"inherit: run '{identifier}' not found in the project.")
 
     ctx.add_metadata(
-        "sillon.parent",
-        {"uuid": str(parent_uuid), "name": parent_name, "params": names},
+        "sillon.parent", {"uuid": snapshot["uuid"], "name": snapshot["name"]}
     )
 
 
@@ -164,7 +148,6 @@ def track(
     project_name: Optional[str] = None,
     project_path: Optional[Union[str, Path]] = None,
     inherit: Optional[Any] = None,
-    inherit_params: bool = True,
 ):
     """Decorator to log function execution and optionally initialize the Tracker.
 
@@ -195,7 +178,6 @@ def track(
                 project_name=project_name,
                 project_path=project_path,
                 inherit=inherit,
-                inherit_params=inherit_params,
             )
 
         return decorator
@@ -211,7 +193,6 @@ def track(
                 project_name=project_name,
                 project_path=project_path,
                 inherit=inherit,
-                inherit_params=inherit_params,
             )
 
         # 2. Execute the function

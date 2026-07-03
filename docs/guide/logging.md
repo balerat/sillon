@@ -89,6 +89,26 @@ def run_experiment(lr, epochs):
     return final_loss
 ```
 
+## Deriving from a previous run (lineage)
+
+Start a run that derives from a previous one — load it with `sillonlab` and pass it to `init`.
+This **only records the relationship**; nothing is copied, so each run still logs its own data
+(no duplicated parameters or arrays):
+
+```python
+import sillonpy as sp
+import sillonlab as sl
+
+base = sl.load_project().get("base_run")     # the run this one builds on
+sp.init(run_name="tuned", inherit=base)       # records a lineage link to base_run
+sp.log_param("lr", 0.001)                      # log this run's own parameters as usual
+```
+
+`inherit` accepts a `sillonlab.Run` or a run name/uuid in the same project (the parent must
+already exist). The link is queryable afterwards — `run.parents()`, `run.children()`, and
+`sillon lineage <run>` — and you can walk back to read a parent's parameters:
+`run.parents()[0].load_parameter("lr")`.
+
 ## Finishing a run
 
 A run is finalized (runtime, status, source committed, data flushed) automatically when your

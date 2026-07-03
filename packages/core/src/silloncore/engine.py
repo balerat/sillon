@@ -1038,9 +1038,7 @@ def _render_report_markdown(report: dict) -> str:
     if report.get("parents"):
         lines += ["", "## Inherited from", ""]
         for parent in report["parents"]:
-            inherited = ", ".join(parent.get("params") or [])
-            suffix = f" (params: {inherited})" if inherited else ""
-            lines.append(f"- `{parent.get('name')}`{suffix}")
+            lines.append(f"- `{parent.get('name')}`")
 
     lines.append("")
     return "\n".join(lines)
