@@ -27,11 +27,11 @@ def resolve_storage_root(project_path) -> Path:
     """
     sillon_dir = Path(project_path).expanduser().resolve() / ".sillon"
     config_path = sillon_dir / "config.toml"
-    if config_path.exists():
-        config = toml.load(config_path)
-        storage_root = config.get("storage", {}).get("storage_root")
-        if storage_root:
-            return Path(storage_root)
+    # if config_path.exists():
+    #     config = toml.load(config_path)
+    #     storage_root = config.get("storage", {}).get("storage_root")
+    #     if storage_root:
+    #         return Path(storage_root)
     return sillon_dir
 
 
