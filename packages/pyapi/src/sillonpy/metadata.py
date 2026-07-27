@@ -14,7 +14,7 @@ def get_imports():
     custom_modules = []
     stdlib = sys.stdlib_module_names # Get all modules in the current script
 
-    for name, mod in sys.modules.items():
+    for name, mod in list(sys.modules.items()):
         path = getattr(mod, "__file__", None)
 
         if path == None:
