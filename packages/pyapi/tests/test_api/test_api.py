@@ -85,6 +85,7 @@ def test_api_track_decorator(clean_workspace):
     assert latest_run.name == "decorator_test"
 
     params = latest_run.parameters
+    print(params)
     assert params["sillon.python.tracked_function_args.calculate_drag"] == [100, 2.5]
     assert params["sillon.python.tracked_function_kwargs.calculate_drag"] == {"drag_coeff": 0.4}
 
