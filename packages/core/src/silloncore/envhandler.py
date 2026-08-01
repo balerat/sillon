@@ -9,6 +9,7 @@ import toml
 from sqlmodel import SQLModel, Session
 
 from silloncommon.database import insert_simulation, create_default_engine_root
+from silloncommon.user_paths import user_config_dir
 from .glob import Glob, get_hash
 
 # .sillon file structure
@@ -21,7 +22,7 @@ from .glob import Glob, get_hash
 #           glob /
 #                   uuid /
 #                   ...
-PROJECT_LIST = Path("~/.config/sillon/registery.toml").expanduser()
+PROJECT_LIST = user_config_dir() / "registery.toml"
 
 
 class ProjectEnvironmentHandler:
@@ -82,15 +83,20 @@ class ProjectEnvironmentHandler:
         self._config_path = self._sillon_dir / "config.toml"
         if not self._config_path.exists():
             print("creating config at ", self._config_path)
-            with open(self._config_path, "w") as f:
+            with open(self._config_path, "w", encoding="utf-8") as f:
                 toml.dump(self._config, f)
         else:
-            with open(self._config_path, "r") as f:
+            with open(self._config_path, "r", encoding="utf-8") as f:
                 self._config = toml.load(f)
                 self._project_id = self._config["Environment"]["project_id"]
                 self._storage_root = Path(self._config["storage"]["storage_root"])
 
     def _raise_permission_sill(self):
+        # POSIX-only: Windows' os.chmod honours nothing but the read-only bit,
+        # so every flag below would be silently discarded there.
+        if os.name != "posix":
+            return
+
         # 0o775 adds Write/Execute permissions for the owner and group
         os.chmod(
             self._sillon_dir,
@@ -113,13 +119,13 @@ class ProjectEnvironmentHandler:
 
     def _create_project_list(self):
         os.makedirs(PROJECT_LIST.parent, exist_ok=True)
-        with open(PROJECT_LIST, "w") as f:
+        with open(PROJECT_LIST, "w", encoding="utf-8") as f:
             toml.dump({"project": {}}, f)
 
     def _add_project(self):
         if not PROJECT_LIST.exists():
             self._create_project_list()
-        with open(PROJECT_LIST, "r") as f:
+        with open(PROJECT_LIST, "r", encoding="utf-8") as f:
             data = toml.load(f)
         data.setdefault("project", {})[str(self._project_id)] = {
             "project_name": self._project_name,
@@ -128,7 +134,7 @@ class ProjectEnvironmentHandler:
             "project_sil": str(self._sillon_dir),
             "project_storage": str(self._storage_root),
         }
-        with open(PROJECT_LIST, "w") as f:
+        with open(PROJECT_LIST, "w", encoding="utf-8") as f:
             toml.dump(data, f)
 
     def get_config(self):
@@ -188,7 +194,7 @@ class ProjectEnvironmentHandler:
             old_item = self._config.get(key)
             if old_item:
                self._config[key] = item
-        with open(self._config_path, "w") as f:
+        with open(self._config_path, "w", encoding="utf-8") as f:
             toml.dump(self._config, f)
 
 class RunEnvironmentHandler:

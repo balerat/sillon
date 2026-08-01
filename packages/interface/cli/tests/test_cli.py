@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
-from silloncommon.database import SimulationTable, ArtifactTable
+from silloncommon.database import sqlite_url, SimulationTable, ArtifactTable
 from silloncore.project_paths import resolve_engine, resolve_storage_root
 
 import silloncli.commands.search as search
@@ -36,7 +36,7 @@ def project(tmp_path):
     with h5py.File(glob_dir / "glob.hdf5", "w") as g:
         g.create_dataset("result/coef", data=np.array([1.0, 2.0]))
 
-    engine = create_engine("sqlite:///" + str(sillon_dir / "database.sql"))
+    engine = create_engine(sqlite_url(sillon_dir / "database.sql"))
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         session.add(

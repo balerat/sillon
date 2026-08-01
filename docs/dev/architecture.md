@@ -28,6 +28,31 @@ your script ──sillonpy──▶ background server ──▶ SQLite (.sillon/
 4. On exit (or `force_dump()`), the server finalizes runtime/status, commits the source into the
    glob, and inserts the row(s) into SQLite.
 
+## Client/server transport
+
+Client and daemon exchange length-prefixed JSON-RPC frames over a connected stream socket.
+*Which* kind of socket is the only platform-dependent part of the system, and it is confined to
+`silloncommon.transport`:
+
+| Transport | Endpoint | Used when |
+|---|---|---|
+| `unix` | `AF_UNIX` socket at `.sillon/daemon.sock` | `socket.AF_UNIX` exists (Linux, macOS) |
+| `tcp` | `AF_INET` on `127.0.0.1`, ephemeral port published in `.sillon/daemon.port` | it does not (Windows) |
+
+Selection is by capability (`hasattr(socket, "AF_UNIX")`) rather than by `sys.platform`. CPython
+does not expose `AF_UNIX` on Windows in any released version — [cpython#77589][afunix] is still
+open — but the day it does, Windows picks up Unix sockets with no code change.
+
+Set `SILLON_TRANSPORT=unix|tcp` to force one. That is how the Windows path gets tested on POSIX
+CI; see the `test-tcp-transport` job.
+
+A loopback TCP port is reachable by any local process, so the daemon writes a random secret to
+`.sillon/daemon.token` (mode `0600` where that means anything) and every client must present it in
+its REGISTER frame — the first frame on every connection. Commands sent on a connection that has
+not successfully registered are refused. The check runs on both transports.
+
+[afunix]: https://github.com/python/cpython/issues/77589
+
 ## Storage layout
 
 ```
@@ -37,6 +62,10 @@ your script ──sillonpy──▶ background server ──▶ SQLite (.sillon/
   glob/<uuid>/glob.hdf5  # heavy results, big-array params, analyses, source
   artifact/<uuid>/...    # copied result files
   figure/<uuid>/...      # logged figures
+  daemon.sock            # AF_UNIX endpoint  (unix transport)
+  daemon.port            # listening port    (tcp transport)
+  daemon.token           # REGISTER secret
+  daemon.pid / .lock     # liveness + spawn serialization
 ```
 
 ## Reading and querying (the engine)
