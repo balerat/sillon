@@ -1,4 +1,5 @@
 # simplypy/daemon.py
+import datetime
 import os
 import sys
 import socket
@@ -54,9 +55,13 @@ def _spawn_daemon(project_path: str, socket_path: Path, pid_file: Path):
     # Launch via the current interpreter so the daemon always runs in the same
     # environment as the client, regardless of whether the console script is on
     # PATH (works from an unactivated venv, a fresh checkout, pytest, etc.).
-    cmd = [sys.executable, "-m", "silloncore.server.main", project_path]
+    cmd = [sys.executable, "-m", "-u", "silloncore.server.main", project_path]
 
     with open(log_path, "a") as log_file:
+        log_file.write(f"\n{'='*60}\n[spawn] {datetime.now().isoformat()} "
+                   f"parent_pid={os.getpid()} cmd={' '.join(cmd)} "
+                   f"cwd={os.getcwd()}\n")
+        log_file.flush()
         if sys.platform == "win32":
             flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
             proc = subprocess.Popen(
