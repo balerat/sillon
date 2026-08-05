@@ -77,7 +77,7 @@ def _spawn_daemon(project_path: str, pid_file: Path):
     # Launch via the current interpreter so the daemon always runs in the same
     # environment as the client, regardless of whether the console script is on
     # PATH (works from an unactivated venv, a fresh checkout, pytest, etc.).
-    cmd = [sys.executable, "-m", "silloncore.server.main", project_path]
+    cmd = [sys.executable, "-m", "-u", "silloncore.server.main", project_path]
 
     with open(log_path, "a", encoding="utf-8") as log_file:
         if sys.platform == "win32":

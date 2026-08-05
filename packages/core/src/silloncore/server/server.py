@@ -173,7 +173,7 @@ class Server:
                 "utf-8"
             )
         except Exception as e:
-            self.logger.exception("Error handling request")   # <- full traceback in the log
+            self.logger.exception("Error handling request", e)   # <- full traceback in the log
             req_id = request["id"] if request else 0
             return self.rpchandler.encode_response({"error": str(e)}, req_id).encode(
                 "utf-8"
@@ -226,10 +226,14 @@ class Server:
         result = command.accept(self.command_visitor, args["run_id"])
 
         if command_type == "dump":
-            self.projEnvHandlers.commit_run(
-                self.simulations.sim_dict[args["run_id"]]
-            )
-            self.simulations.rm_sim(args["run_id"])
+            try:
+                self.projEnvHandlers.commit_run(
+                    self.simulations.sim_dict[args["run_id"]]
+                )
+                self.simulations.rm_sim(args["run_id"])
+                self.logger.info("Dump successfully")
+            except Exception as e:
+                self.logger.error("Error dumping run", e)
         elif command_type == "shutdown":
             self.sel.unregister(self.sock)
             self.sock.close()
