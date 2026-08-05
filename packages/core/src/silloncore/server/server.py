@@ -5,6 +5,7 @@ import types
 import struct
 import logging
 import time
+from names_generator import generate_name
 
 from silloncommon.commands import (
     AddMetaDataCmd,
@@ -173,6 +174,12 @@ class Server:
         try:
             request = self.rpchandler.decode_request(raw.decode("utf-8"))
             result = self._dispatch(request, data)
+            if result == "fail":
+                self.logger.exception("Fail dump")   # <- full traceback in the log
+                req_id = request["id"] if request else 0
+                return self.rpchandler.encode_response({"error": str("fail dump see daemon log")}, req_id).encode(
+                    "utf-8"
+                )
             return self.rpchandler.encode_response(result, request["id"]).encode(
                 "utf-8"
             )
@@ -195,11 +202,14 @@ class Server:
                 self.projEnvHandlers = ProjectEnvironmentHandler(args["project_path"])
             # Ensure the run name is unique: increment on collision with a
             # finished run (DB) or an in-flight run (registered, not yet dumped).
+            in_flight = [sim.run_name for sim in self.simulations.sim_dict.values()]
             if args.get("run_name"):
-                in_flight = [sim.run_name for sim in self.simulations.sim_dict.values()]
                 args["run_name"] = next_available_name(
                     self.projEnvHandlers.get_engine(), args["run_name"], in_flight
                 )
+            else:
+                args["run_name"] = next_available_name(self.projEnvHandlers.get_engine(), generate_name(), in_flight)
+
             self.simulations.add_sim(**args)
             data.run_id = args["run_id"]
             self.logger.info("Simulation and env handler created")
@@ -211,17 +221,22 @@ class Server:
         self.logger.info("Command: %s", command_type)
         CommandClass = self.command_registry[command_type]
         command = CommandClass(args["name"], args["value"])
-        result = command.accept(self.command_visitor, args["run_id"])
+        run_id = args["run_id"]
+        result = command.accept(self.command_visitor, run_id)
 
         if command_type == "dump":
             try:
+                sim = self.simulations.sim_dict[run_id]
+                sim.status = "SUCCESS"
                 self.projEnvHandlers.commit_run(
-                    self.simulations.sim_dict[args["run_id"]]
+                    self.simulations.sim_dict[run_id]
                 )
-                self.simulations.rm_sim(args["run_id"])
+                self.simulations.rm_sim(run_id)
                 self.logger.info("Dump successfully")
             except Exception as e:
+                self.simulations.rm_sim(run_id)
                 self.logger.error("Error dumping run", e)
+                result = "fail"
         elif command_type == "shutdown":
             self.sel.unregister(self.sock)
             self.sock.close()

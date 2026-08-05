@@ -264,8 +264,8 @@ class Simulation:
             value (Any): The value of the parameter, or a staging reference.
         """
         # TODO: Add overwrite check if needed
-        if isinstance(value, dict) and value.get("__sillon_array_ref__"):
-            staging_path = Path(value["staging_path"])
+        if isinstance(value, dict) and value.get("sillon.is_large_array"):
+            staging_path = Path(value["pointer"])
             pointer, hsh = self.glob.save_param_from_staging(name, staging_path)
             self.parameters[name] = {
                 "__sillon_array_ref__": True,

@@ -1,6 +1,5 @@
 import uuid
 from pathlib import Path
-import cProfile
 import os
 import time
 
@@ -63,7 +62,6 @@ class Tracker:
         )
         self.server.connect_server()
         self.cwd = os.getcwd()
-        self.start_profiler()
         self.callstack = {}
         self.metadata_pysillon()
 
@@ -78,22 +76,12 @@ class Tracker:
             "sillon.python.cwd": self.cwd,
             "sillon.main_script_source": load_main_script_source(self.main_script_path),
             "sillon.python.custom_modules": custom_modules,
-            "sillon.python.sys_modules": sys_modules,
+            # "sillon.python.sys_modules": sys_modules,
             # "sillon.python.source_custom_modules": save_custom_sources(custom_modules), Need to implement a clever way of sending that to the server.
         }
         for key, value in self.metadata.items():
             self.add_metadata(key, value)
 
-    def start_profiler(self):
-        """
-        Start a python profiler  for the run
-        """
-        try:
-            self.profiler = cProfile.Profile()
-            self.profiler.enable()
-            self.profiler_enabled = True
-        except:
-            self.profiler_enabled = False
 
     def close(self):
         """
@@ -101,12 +89,8 @@ class Tracker:
         """
         self.run_time = time.time() - self.start_time
         self.add_metadata("sillon.runtime", self.run_time)
-        self.add_metadata("sillon.status", "SUCCESS")
+        # self.add_metadata("sillon.status", "SUCCESS")
 
-        if self.profiler_enabled:
-            self.profiler.disable()
-            self.profiler.dump_stats("profiling.txt")
-            self.add_metadata("sillon.python.cprofiler_dump", "profiling.txt")
         self.add_metadata("sillon.python.callstack", self.callstack)
         self.server.dump_run()  # When the simulation ends we ask the server to dump the simulation into the database
 
@@ -126,7 +110,10 @@ class Tracker:
         # glob by the server), the same way large results are handled.
         if is_large_array(parameter):
             parameter = write_staging_array(parameter, self.project_path)
-        self.server.execute_command(LogParamCmd(id, parameter))
+            parameter = {"pointer": parameter, "sillon.is_large_array": True}
+            self.server.execute_command(LogParamCmd(id, parameter))
+        else:
+            self.server.execute_command(LogParamCmd(id, parameter))
 
     def log_result(self, id, result):
         value = result.get("value")

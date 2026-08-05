@@ -106,8 +106,11 @@ class ServerCom:
         try:
             decoded = self.rpc_handler.decode_response(reply.decode("utf-8"))
             self.command_id += 1
-
-            return decoded["result"]
+            if decoded.get("error") is not None:
+                print(f"[SILLONPY] Failure to execute command: {decoded.get("error")}")
+            else:
+                return decoded["result"]
+            
         except Exception as e:
-            print(f"[SILLONPY] Failure to excute command: {e}")
+            print(f"[SILLONPY] Failure to execute command: {e}")
             return None

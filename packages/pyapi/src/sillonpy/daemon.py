@@ -6,12 +6,17 @@ import socket
 import subprocess
 import time
 from pathlib import Path
-from filelock import FileLock   # pip install filelock — wraps flock/Windows correctly
+from filelock import FileLock  # pip install filelock — wraps flock/Windows correctly
 
-from silloncommon.socket_path import get_socket_path, get_lockfile_path, get_pidfile_path
+from silloncommon.socket_path import (
+    get_socket_path,
+    get_lockfile_path,
+    get_pidfile_path,
+)
 
-STARTUP_TIMEOUT = 10.0   # seconds to wait for daemon to become ready
-POLL_INTERVAL   = 0.05   # seconds between readiness polls
+STARTUP_TIMEOUT = 10.0  # seconds to wait for daemon to become ready
+POLL_INTERVAL = 0.05  # seconds between readiness polls
+
 
 def _is_pid_alive(pid: int) -> bool:
     # NOTE: minor PID-reuse race possible after crash + OS PID recycling.
@@ -55,12 +60,9 @@ def _spawn_daemon(project_path: str, socket_path: Path, pid_file: Path):
     # Launch via the current interpreter so the daemon always runs in the same
     # environment as the client, regardless of whether the console script is on
     # PATH (works from an unactivated venv, a fresh checkout, pytest, etc.).
-    cmd = [sys.executable, "-m", "-u", "silloncore.server.main", project_path]
+    cmd = [sys.executable, "-u", "-m", "silloncore.server.main", project_path]
 
     with open(log_path, "a") as log_file:
-        log_file.write(f"\n{'='*60}\n[spawn] {datetime.now().isoformat()} "
-                   f"parent_pid={os.getpid()} cmd={' '.join(cmd)} "
-                   f"cwd={os.getcwd()}\n")
         log_file.flush()
         if sys.platform == "win32":
             flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -76,7 +78,7 @@ def _spawn_daemon(project_path: str, socket_path: Path, pid_file: Path):
                 cmd,
                 stdout=log_file,
                 stderr=log_file,
-                start_new_session=True,   # detach from parent's process group
+                start_new_session=True,  # detach from parent's process group
                 close_fds=True,
             )
 
@@ -91,8 +93,8 @@ def ensure_daemon(project_path: str) -> None:
     Safe to call from multiple processes simultaneously.
     """
     socket_path = get_socket_path(project_path)
-    pid_file    = get_pidfile_path(project_path)
-    lock_file   = get_lockfile_path(project_path)
+    pid_file = get_pidfile_path(project_path)
+    lock_file = get_lockfile_path(project_path)
 
     Path(project_path, ".sillon").mkdir(parents=True, exist_ok=True)
 
@@ -101,7 +103,7 @@ def ensure_daemon(project_path: str) -> None:
         s = _try_connect(socket_path)
         if s is not None:
             s.close()
-            return   # already running, nothing to do
+            return  # already running, nothing to do
 
         # Socket file exists but connection refused — check if PID is alive
         if pid_file.exists():

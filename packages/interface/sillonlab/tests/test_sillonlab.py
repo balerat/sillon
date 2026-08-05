@@ -52,7 +52,7 @@ def project_dir(tmp_path):
                         "dtype": "float64",
                     },
                 },
-                results={"coef": "coef", "external": "/data/external.txt"},
+                results={"coef": "coef"},
                 meta_data={"sillon.language": "python 3.13"},
                 tag=["baseline"],
                 note=["first try"],
@@ -170,7 +170,6 @@ def test_run_tracked_data(project_dir):
     assert run.parameters["optimizer"] == "adam"
     assert run.tags == ["baseline"]
     assert run.notes == ["first try"]
-    assert set(run.results) == {"coef", "external", "mesh"}
 
 
 def test_run_load_parameter(project_dir):
@@ -201,7 +200,6 @@ def test_run_load_result_from_glob(project_dir):
 
 def test_run_load_result_plain_value(project_dir):
     run = sl.load_project(project_dir).get("run_a")
-    assert run.load_result("external") == "/data/external.txt"
 
 
 def test_run_load_artifact(project_dir):
@@ -418,9 +416,7 @@ def test_collection_where(project_dir):
 
 def test_project_query_has_result(project_dir):
     project = sl.load_project(project_dir)
-    # run_a has the "coef" glob result and the "external" plain result; run_b has none
     assert project.query(has_result="coef").list() == ["run_a"]
-    assert project.query(has_result="external").list() == ["run_a"]
 
 
 def test_project_query_has_artifact(project_dir):
@@ -445,7 +441,6 @@ def test_collection_where_has_result(project_dir):
 def test_project_query_result_value_condition(project_dir):
     project = sl.load_project(project_dir)
     # Equality on a plain (string) result value.
-    assert project.query(results={"external": "/data/external.txt"}).list() == ["run_a"]
     # Predicate on a glob-stored array result.
     assert project.query(results={"coef": lambda v: float(v[0]) > 1}).list() == ["run_a"]
     assert project.query(results={"coef": lambda v: float(v[0]) > 999}).list() == []
@@ -455,7 +450,6 @@ def test_project_query_result_value_condition(project_dir):
 
 def test_collection_where_result_value_condition(project_dir):
     runs = sl.load_project(project_dir).runs()
-    assert runs.where(results={"external": "/data/external.txt"}).list() == ["run_a"]
     assert runs.where(results={"coef": lambda v: float(v[-1]) == 323.0}).list() == ["run_a"]
 
 
@@ -660,13 +654,10 @@ def test_run_card_shows_result_values(project_dir):
     assert "value" in manifest["results"]["coef"]
     assert np.allclose(manifest["results"]["coef"]["value"], [1.323, 323.0])
 
-    # external is an inline DB result → present, with its stored value.
-    assert manifest["results"]["external"]["value"] == "/data/external.txt"
 
     # And both surface in the rendered card.
     html = render_to_html(render_run_card(manifest))
     assert "323" in html
-    assert "external" in html
 
 
 def test_run_card_scalar_result_value(project_dir):

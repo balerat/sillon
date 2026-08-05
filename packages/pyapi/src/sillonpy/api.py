@@ -13,7 +13,6 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 import atexit
-import inspect
 from pathlib import Path
 from typing import Any, Optional, Dict, Union
 
@@ -39,8 +38,8 @@ def get_context():
     """
     try:
         return _context.get()
-    except LookupError:
-        raise RuntimeError("Tracker has not been initialized !")
+    except AttributeError:
+        raise RuntimeError("Tracker has not been initialized ! Please initialize it witht he context track_run ")
 
 
 def set_context(ctx):

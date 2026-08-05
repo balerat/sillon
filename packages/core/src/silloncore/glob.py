@@ -271,24 +271,24 @@ class Glob:
         queue to create datasets. If a dataset name already exists, it deletes 
         the old one to prevent errors before writing the new data. Forces a disk flush.
         """
-        try:
             # Result are in the group "result" in the datasets
             # Let's assure it exists first
-            res_group = self.file.require_group("result")
+        res_group = self.file.require_group("result")
 
-            for name, data in self.results:
+        for name, data in self.results:
 
-                # If there is a duplicate we raise a warning and overwrite it with the last value (might need to change)
+            # If there is a duplicate we raise a warning and overwrite it with the last value (might need to change)
+            try:
                 if name in res_group:
                     print("Duplicate dataset")
                     del res_group[name]
 
                 res_group.create_dataset(name, data=data)
-            self.file.flush()  # Forces write to disk
-        except TypeError as e:
-            print(
-                f"Failed to save data: {e}. Ensure 'data' is a NumPy array or compatible type."
-            )
+            except TypeError as e:
+                print(
+                    f"Failed to save data: {e}. Ensure 'data' is a NumPy array or compatible type."
+                )
+        self.file.flush()  # Forces write to disk
 
     def commit_parameter(self):
         """Writes all queued heavy parameters to the 'parameter' HDF5 group.

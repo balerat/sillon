@@ -1,3 +1,4 @@
+from os import sysconf_names
 import shutil
 from pathlib import Path
 
@@ -299,7 +300,11 @@ def load_run_result(storage_root, snapshot: dict, name: str):
         data = read_glob(storage_root, snapshot["uuid"], "result", name)
         if data is not None:
             return data
-        return snapshot["results"][name]
+        print(snapshot["artifacts"])
+        print(snapshot["results"][name])
+        if snapshot["artifacts"].get(name) is not None:
+            return snapshot["results"][name]
+        raise AttributeError(f"No result found for {snapshot["results"][name]}.")
 
     if name in snapshot["artifacts"]:
         return load_run_artifact(storage_root, snapshot, name)
