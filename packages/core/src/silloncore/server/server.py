@@ -175,20 +175,27 @@ class Server:
             request = self.rpchandler.decode_request(raw.decode("utf-8"))
             result = self._dispatch(request, data)
             if result == "fail":
-                self.logger.exception("Fail dump")   # <- full traceback in the log
+                # .error, not .exception: there is no exception in flight here
+                # (it was handled in _dispatch), and .exception would log a
+                # useless "NoneType: None" instead of anything actionable.
+                self.logger.error("Dump failed - see the traceback logged above")
                 req_id = request["id"] if request else 0
-                return self.rpchandler.encode_response({"error": str("fail dump see daemon log")}, req_id).encode(
-                    "utf-8"
-                )
+                # Third argument, so the error lands at the TOP level of the
+                # response. Nested inside "result" the client cannot see it:
+                # decode_response only raises on a top-level "error" key.
+                return self.rpchandler.encode_response(
+                    None, req_id, "Dump failed - see .sillon/daemon.log"
+                ).encode("utf-8")
             return self.rpchandler.encode_response(result, request["id"]).encode(
                 "utf-8"
             )
         except Exception as e:
-            self.logger.exception("Error handling request", e)   # <- full traceback in the log
+            # "%s" matters: passing `e` with no placeholder makes logging raise
+            # TypeError while formatting and drop the record, which is why these
+            # failures looked silent.
+            self.logger.exception("Error handling request: %s", e)
             req_id = request["id"] if request else 0
-            return self.rpchandler.encode_response({"error": str(e)}, req_id).encode(
-                "utf-8"
-            )
+            return self.rpchandler.encode_response(None, req_id, str(e)).encode("utf-8")
 
     def _dispatch(self, request: dict, data) -> str:
         """Routes a decoded JSON-RPC request to the appropriate command handler
@@ -235,7 +242,7 @@ class Server:
                 self.logger.info("Dump successfully")
             except Exception as e:
                 self.simulations.rm_sim(run_id)
-                self.logger.error("Error dumping run", e)
+                self.logger.exception("Error dumping run %s: %s", run_id, e)
                 result = "fail"
         elif command_type == "shutdown":
             self.sel.unregister(self.sock)

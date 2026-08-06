@@ -82,7 +82,12 @@ def create_default_engine(project_path):
     )
 
 def create_default_engine_root(project_root):
-    return create_engine("sqlite:///" + str(project_root / "database.sql"))
+    # Must migrate: this is the engine the daemon writes runs through, so an
+    # un-migrated database here means every insert into a project created by an
+    # older sillon fails on the missing column (e.g. `parents`).
+    return migrate_schema(
+        create_engine("sqlite:///" + str(project_root / "database.sql"))
+    )
 
 # ==========================================
 #               ORM MODELS
