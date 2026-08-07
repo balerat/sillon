@@ -109,11 +109,11 @@ class Tracker:
         # Offload heavy parameter arrays to a staging file (claimed into the
         # glob by the server), the same way large results are handled.
         if is_large_array(parameter):
+            # Send the staging reference as-is, exactly like log_result. Wrapping
+            # it in a second envelope loses the shape/dtype the server records
+            # and hides staging_path where the server does not look for it.
             parameter = write_staging_array(parameter, self.project_path)
-            parameter = {"pointer": parameter, "sillon.is_large_array": True}
-            self.server.execute_command(LogParamCmd(id, parameter))
-        else:
-            self.server.execute_command(LogParamCmd(id, parameter))
+        self.server.execute_command(LogParamCmd(id, parameter))
 
     def log_result(self, id, result):
         value = result.get("value")

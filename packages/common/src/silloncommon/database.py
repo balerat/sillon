@@ -13,7 +13,7 @@ from sqlmodel import (
     union_all,
     text,
 )
-from sqlalchemy import Column
+from sqlalchemy import Column, event
 from sqlalchemy.types import JSON
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
@@ -28,6 +28,37 @@ if TYPE_CHECKING:
 # ==========================================
 
 from silloncommon import __version__ as sillon_VERSION
+
+
+def _configure_sqlite_connection(dbapi_connection, _connection_record):
+    """Apply sillon's SQLite pragmas to every new connection.
+
+    - WAL: readers no longer block the writer. Without it a `sillon show` or a
+      notebook query issued while the daemon is committing fails with
+      "database is locked". WAL is persisted in the database file, so this also
+      upgrades existing projects the first time they are opened.
+    - busy_timeout: wait for a lock rather than failing instantly.
+    - synchronous=NORMAL: safe under WAL, and avoids two fsyncs per commit
+      inside the daemon's single-threaded event loop.
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
+def make_engine(db_path) -> Engine:
+    """Create a SQLite engine with sillon's pragmas attached.
+
+    The single place engines are built, so no code path can accidentally get an
+    unconfigured (non-WAL) connection.
+    """
+    engine = create_engine("sqlite:///" + Path(db_path).as_posix())
+    event.listen(engine, "connect", _configure_sqlite_connection)
+    return engine
 
 
 def migrate_schema(engine: Engine) -> Engine:
@@ -57,6 +88,13 @@ def migrate_schema(engine: Engine) -> Engine:
                         conn.exec_driver_sql(
                             f"ALTER TABLE simulationtable ADD COLUMN {col.name} {coltype}"
                         )
+
+            # create_all() skips a table that already exists, and skips its
+            # indexes with it — so an existing project never picks up a newly
+            # declared index unless we create it explicitly.
+            for table in SQLModel.metadata.tables.values():
+                for index in table.indexes:
+                    index.create(bind=conn, checkfirst=True)
     except OperationalError:
         pass  # best-effort; a brand-new DB is already fully created above
     return engine
@@ -71,23 +109,17 @@ def get_engine(project_path: Path) -> Engine:
     Returns:
         Engine: A SQLAlchemy engine connected to `.sillon/database.sql`.
     """
-    return migrate_schema(
-        create_engine("sqlite:///" + str(project_path / ".sillon" / "database.sql"))
-    )
+    return migrate_schema(make_engine(project_path / ".sillon" / "database.sql"))
 
 
 def create_default_engine(project_path):
-    return migrate_schema(
-        create_engine("sqlite:///" + str(project_path / ".sillon" / "database.sql"))
-    )
+    return migrate_schema(make_engine(project_path / ".sillon" / "database.sql"))
 
 def create_default_engine_root(project_root):
     # Must migrate: this is the engine the daemon writes runs through, so an
     # un-migrated database here means every insert into a project created by an
     # older sillon fails on the missing column (e.g. `parents`).
-    return migrate_schema(
-        create_engine("sqlite:///" + str(project_root / "database.sql"))
-    )
+    return migrate_schema(make_engine(project_root / "database.sql"))
 
 # ==========================================
 #               ORM MODELS
@@ -125,9 +157,12 @@ class SimulationTable(SQLModel, table=True):
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    uuid: str
-    name: str
-    date: Optional[str]
+    # Indexed: every run lookup filters on uuid or name (select_run_snapshot),
+    # and the overview sorts/filters on date and status. Without these, each
+    # snapshot is a full table scan — and query_runs takes one snapshot per run.
+    uuid: str = Field(index=True)
+    name: str = Field(index=True)
+    date: Optional[str] = Field(default=None, index=True)
 
     # JSON Data Columns
     parameters: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
@@ -141,7 +176,7 @@ class SimulationTable(SQLModel, table=True):
 
     # Execution & Environment Metadata
     runtime: Optional[str]
-    status: Optional[str]
+    status: Optional[str] = Field(default=None, index=True)
     platform: str
     hostname: str
     # isdirty: Optional[bool]
@@ -179,7 +214,11 @@ class ArtifactTable(SQLModel, table=True):
     # size: Optional[str]
 
     # Relationships
-    run_id: Optional[int] = Field(default=None, foreign_key="simulationtable.id")
+    # Indexed: loading a run's linked rows filters on run_id, three times per
+    # snapshot, and SQLite does not index foreign keys automatically.
+    run_id: Optional[int] = Field(
+        default=None, foreign_key="simulationtable.id", index=True
+    )
     simulation: Optional[SimulationTable] = Relationship(back_populates="artifacts")
 
 
@@ -212,7 +251,11 @@ class FigureTable(SQLModel, table=True):
     date: Optional[str]
 
     # Relationships
-    run_id: Optional[int] = Field(default=None, foreign_key="simulationtable.id")
+    # Indexed: loading a run's linked rows filters on run_id, three times per
+    # snapshot, and SQLite does not index foreign keys automatically.
+    run_id: Optional[int] = Field(
+        default=None, foreign_key="simulationtable.id", index=True
+    )
     simulation: Optional[SimulationTable] = Relationship(back_populates="figures")
 
 
@@ -243,7 +286,11 @@ class AnalysisTable(SQLModel, table=True):
     date: Optional[str]
 
     # Relationships
-    run_id: Optional[int] = Field(default=None, foreign_key="simulationtable.id")
+    # Indexed: loading a run's linked rows filters on run_id, three times per
+    # snapshot, and SQLite does not index foreign keys automatically.
+    run_id: Optional[int] = Field(
+        default=None, foreign_key="simulationtable.id", index=True
+    )
     simulation: Optional[SimulationTable] = Relationship(back_populates="analyses")
 
 
