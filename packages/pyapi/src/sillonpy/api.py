@@ -489,17 +489,13 @@ def add_note(note: Union[str, list]):
         raise ValueError("Note must be of type str")
 
 
-def add_tag(tag: Union[str, list]):
-    """Appends a tag (or list of tags) to the current simulation.
-
-    Args:
-        tag (str | list[str]): A single string tag or a list of string tags.
-    """
-    if isinstance(tag, str) or (
-        isinstance(tag, list) and all(isinstance(x, str) for x in tag)
-    ):
-        ctx = get_context()
-        ctx.add_tag(tag)
+def add_tag(*tags: str) -> None:
+    """Append one or more tags to the current simulation."""
+    if not all(isinstance(t, str) for t in tags):
+        raise TypeError("Tags must be str.")
+    ctx = get_context()
+    for t in tags:
+        ctx.add_tag(t)
 
 
 def force_dump():
