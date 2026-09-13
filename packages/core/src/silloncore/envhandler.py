@@ -84,15 +84,20 @@ class ProjectEnvironmentHandler:
         self._config_path = self._sillon_dir / "config.toml"
         if not self._config_path.exists():
             print("creating config at ", self._config_path)
-            with open(self._config_path, "w") as f:
+            with open(self._config_path, "w", encoding="utf-8") as f:
                 toml.dump(self._config, f)
         else:
-            with open(self._config_path, "r") as f:
+            with open(self._config_path, "r", encoding="utf-8") as f:
                 self._config = toml.load(f)
                 self._project_id = self._config["Environment"]["project_id"]
                 self._storage_root = Path(self._config["storage"]["storage_root"])
 
     def _raise_permission_sill(self):
+        # POSIX-only: Windows' os.chmod honours nothing but the read-only bit,
+        # so every flag below would be silently discarded there.
+        if os.name != "posix":
+            return
+
         # 0o775 adds Write/Execute permissions for the owner and group
         os.chmod(
             self._sillon_dir,
@@ -195,7 +200,7 @@ class ProjectEnvironmentHandler:
             old_item = self._config.get(key)
             if old_item:
                self._config[key] = item
-        with open(self._config_path, "w") as f:
+        with open(self._config_path, "w", encoding="utf-8") as f:
             toml.dump(self._config, f)
 
 class RunEnvironmentHandler:

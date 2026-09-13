@@ -37,10 +37,11 @@ sillon projects
 
 The daemon could not come up. The log names the cause. Most common:
 
-- **`AF_UNIX path too long`** — the socket path has a hard OS limit of about 104
-  characters, and it lives inside your project. A deeply nested project
-  directory hits it. Move the project somewhere shallower, or point the run
-  elsewhere with `project_path=`.
+- **`AF_UNIX path too long`** (Linux/macOS only) — the socket path has a hard OS
+  limit of about 104 characters, and it lives inside your project. A deeply
+  nested project directory hits it. Move the project somewhere shallower, or
+  point the run elsewhere with `project_path=`. Windows uses a loopback TCP
+  port instead and has no such limit.
 - An import error in your environment — the daemon runs on the same interpreter
   as your script.
 
@@ -95,10 +96,14 @@ ps aux | grep sillon-server-daemon
   (seconds) — raise it if you run scripts in bursts and want it to stay warm.
 - It will not exit while a run is still open.
 
+Its endpoint files live in `.sillon/` and are removed when it exits:
+`daemon.sock` on Linux/macOS, or `daemon.port` and `daemon.token` on Windows.
+
 To stop one by hand:
 
 ```bash
-kill "$(cat .sillon/daemon.pid)"
+kill "$(cat .sillon/daemon.pid)"          # Linux/macOS
+taskkill /PID (Get-Content .sillon\daemon.pid) /F   # Windows PowerShell
 ```
 
 Killing it while a run is open loses that run's unsealed data. Killing it

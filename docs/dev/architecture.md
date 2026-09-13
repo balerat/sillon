@@ -59,6 +59,34 @@ One per project, keyed by the project path. Single-threaded, built on
   while a run is still open.
 - Framing is a 4-byte big-endian length prefix around UTF-8 JSON-RPC.
 
+### Transport
+
+Client and daemon exchange those frames over a connected stream socket. Which
+kind is the only platform-dependent part of the system, and it lives entirely in
+`silloncommon.transport`:
+
+| Transport | Endpoint | Used when |
+|---|---|---|
+| `unix` | `AF_UNIX` socket at `.sillon/daemon.sock` | `socket.AF_UNIX` exists (Linux, macOS) |
+| `tcp` | `AF_INET` on `127.0.0.1`, ephemeral port in `.sillon/daemon.port` | it does not (Windows) |
+
+Selection is by capability (`hasattr(socket, "AF_UNIX")`) rather than by
+`sys.platform`, so if CPython ever ships Unix sockets on Windows this picks them
+up with no code change. `SILLON_TRANSPORT=unix|tcp` forces one — that is how the
+Windows path is tested on POSIX CI.
+
+Both transports carry the same framing, the same JSON-RPC layer and the same
+`selectors` loop; only `bind`/`connect` differ. Named pipes were rejected for
+exactly that reason: `selectors` cannot poll pipe handles, so the daemon would
+need a second event loop.
+
+A loopback TCP port is reachable by any local process, so the daemon writes a
+random secret to `.sillon/daemon.token` and every client presents it in its
+REGISTER frame — the first frame on every connection. Commands on a connection
+that has not registered are refused. The check runs on both transports, which
+also closes the hole where any local user able to traverse the project directory
+could drive the Unix socket.
+
 ## Storage layout
 
 ```
@@ -107,11 +135,9 @@ registry is an index, not data — deleting it loses nothing.
 
 ## Known limitations
 
-- **Unix only.** The client and daemon talk over an `AF_UNIX` socket. A
-  transport abstraction for Windows exists on the `windows_port` branch.
-- **Deep project paths.** `AF_UNIX` socket paths are capped near 104 bytes and
-  the socket lives inside the project; a deeply nested project cannot start its
-  daemon.
+- **Deep project paths (POSIX only).** `AF_UNIX` socket paths are capped near
+  104 bytes and the socket lives inside the project, so a deeply nested project
+  cannot start its daemon. The TCP transport has no such limit.
 - **Query memory.** `select_run_index` loads every run's JSON with no limit
   (~88 MB at 10,000 runs), and the heavy phase fetches one snapshot per
   survivor. Fine into the low thousands of runs.

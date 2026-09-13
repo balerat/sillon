@@ -119,8 +119,7 @@ provenance.
 
 ## Requirements
 
-Python 3.11+, Linux or macOS. Windows is not supported yet — the client and the
-daemon talk over a Unix domain socket.
+Python 3.11+ on Linux, macOS or Windows. CI runs the full suite on all three.
 
 ## How it works
 

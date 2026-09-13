@@ -19,8 +19,13 @@ plotting, you already have it.
 ## Requirements
 
 - Python 3.11 or newer
-- Linux or macOS. Windows is not supported yet: the client and the daemon talk
-  over a Unix domain socket.
+- Linux, macOS or Windows
+
+The client and the daemon talk over a Unix domain socket where one is available,
+and over a loopback TCP port on Windows, where CPython does not expose
+`AF_UNIX`. You do not configure this — sillon picks the right one. Set
+`SILLON_TRANSPORT=unix|tcp` only if you want to force it (the test suite does,
+to exercise the Windows path on Linux).
 
 ## Check it worked
 

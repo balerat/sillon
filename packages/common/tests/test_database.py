@@ -4,6 +4,7 @@ import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
 from silloncommon.database import (
+    sqlite_url,
     SimulationTable,
     ArtifactTable,
     AnalysisTable,
@@ -45,7 +46,7 @@ def _make_run(name, uuid, **overrides):
 
 @pytest.fixture()
 def engine(tmp_path):
-    engine = create_engine("sqlite:///" + str(tmp_path / "database.sql"))
+    engine = create_engine(sqlite_url(tmp_path / "database.sql"))
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         run_a = _make_run("run_a", "uuid-a")

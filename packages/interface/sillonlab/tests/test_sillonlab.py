@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from sqlmodel import SQLModel, Session, create_engine
 
-from silloncommon.database import SimulationTable, ArtifactTable, FigureTable
+from silloncommon.database import sqlite_url, SimulationTable, ArtifactTable, FigureTable
 
 import sillonlab as sl
 
@@ -33,7 +33,7 @@ def project_dir(tmp_path):
         # A heavy parameter array offloaded to the glob 'parameter' group.
         g.create_dataset("parameter/big_param", data=np.arange(1000, dtype=float))
 
-    engine = create_engine("sqlite:///" + str(sillon_dir / "database.sql"))
+    engine = create_engine(sqlite_url(sillon_dir / "database.sql"))
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         session.add(
@@ -939,7 +939,7 @@ def test_migrate_schema_adds_parents_column(tmp_path):
     from silloncommon.database import migrate_schema, select_run_index
 
     db = tmp_path / "old.sql"
-    eng = _ce("sqlite:///" + str(db))
+    eng = _ce(sqlite_url(db))
     with eng.begin() as conn:
         conn.exec_driver_sql(
             "CREATE TABLE simulationtable (id INTEGER PRIMARY KEY, uuid TEXT, name TEXT,"

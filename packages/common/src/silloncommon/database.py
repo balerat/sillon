@@ -100,6 +100,16 @@ def migrate_schema(engine: Engine) -> Engine:
     return engine
 
 
+def sqlite_url(db_path) -> str:
+    """Build a SQLite connection URL from a filesystem path.
+
+    Uses forward slashes even on Windows: `str(Path)` there yields
+    `C:\\Users\\...\\database.sql`, and backslashes inside a URL are not
+    portable. `sqlite:///C:/Users/.../database.sql` is the documented form.
+    """
+    return "sqlite:///" + Path(db_path).as_posix()
+
+
 def get_engine(project_path: Path) -> Engine:
     """Initializes and returns the SQLite database engine.
 

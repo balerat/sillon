@@ -1,3 +1,5 @@
+*.pyc
+
 # Python Artifacts
 *.pyc
 *.sillon
@@ -33,3 +35,5 @@ profiling.txt
 
 # Example projects are tracked; the stores they create when run are not.
 examples/**/.sillon/
+
+__pycache__/

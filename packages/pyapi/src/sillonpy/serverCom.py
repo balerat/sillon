@@ -5,7 +5,7 @@ from pathlib import Path
 from silloncommon.rpcHandler import RPCHandler
 from silloncommon.commands import ShutDownCmd, DumpCmd
 from silloncommon.framing import send_msg, recv_msg
-from silloncommon.socket_path import get_socket_path
+from silloncommon import transport
 from sillonpy.daemon import ensure_daemon
 
 
@@ -31,17 +31,22 @@ class ServerCom:
     def connect_server(self):
         # Connects to the server
         ensure_daemon(self.project_path)
-        socket_path = get_socket_path(self.project_path)
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect(str(socket_path))
+        self.sock = transport.connect(self.project_path)
+        if self.sock is None:
+            raise ConnectionError(
+                f"Could not connect to the sillon daemon for {self.project_path}"
+            )
 
-        # Register the run into the server
+        # Register the run into the server. The token proves we can read
+        # .sillon/daemon.token, which is what authorises us on the loopback-TCP
+        # transport (see silloncommon.transport).
         register_msg = json.dumps(
             {
                 "jsonrpc": self.rpc_handler.JSONRPC_VERSION,
                 "method": "REGISTER",
                 "params": json.dumps(
                     {
+                        "auth_token": transport.read_token(self.project_path),
                         "run_id": self.uuid,
                         "run_name": self.run_name,
                         "project_name": self.project_name,
@@ -67,7 +72,8 @@ class ServerCom:
         result = decoded["result"]
         if isinstance(result, dict):
             if not result.get("ack"):
-                raise Exception("Could not register run to the server")
+                reason = result.get("error", "no acknowledgement")
+                raise Exception(f"Could not register run to the server: {reason}")
             if result.get("run_name"):
                 self.run_name = result["run_name"]
         elif result != "ACK":

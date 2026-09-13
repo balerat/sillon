@@ -1,6 +1,6 @@
 import os
 import traceback
-import socket
+import secrets
 import selectors
 import types
 import struct
@@ -24,7 +24,8 @@ from silloncommon.rpcHandler import RPCHandler
 from silloncommon.database import next_available_name
 from silloncore.simulation import Simulations_object
 from silloncore.envhandler import ProjectEnvironmentHandler
-from silloncommon.socket_path import get_socket_path, get_pidfile_path
+from silloncommon.socket_path import get_pidfile_path
+from silloncommon import transport
 
 # Set the config for the log
 logging.basicConfig(
@@ -43,16 +44,12 @@ class Server:
     def __init__(self, project_path: str):
 
         self.project_path = project_path
-        socket_path = get_socket_path(project_path)
-        socket_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Remove stale socket file if it exists (crash leftover)
-        if socket_path.exists():
-            socket_path.unlink()
-
-        # Information about the server connection
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.bind(str(socket_path))
+        # Bind, listen and publish the endpoint. Everything platform-specific
+        # (AF_UNIX vs loopback TCP, stale-endpoint cleanup, auth token) lives in
+        # silloncommon.transport; from here on the socket is just a stream.
+        self.sock = transport.create_listener(project_path)
+        self.auth_token = transport.read_token(project_path)
 
         self.a_Is_Active = True
         self.command_visitor = CommandVisitor()
@@ -60,9 +57,6 @@ class Server:
         self.logger = logging.getLogger(__name__)
 
         self.sel = selectors.DefaultSelector()
-        self.sock.setsockopt(
-            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
-        )  # Tell the server to imediatly release the IP when the server is dead to prevent "IP already in use error"
 
         # The state of the server
         # IMPORTANT TO KEEP IT SO THE USER CAN CONTROL IT
@@ -83,8 +77,8 @@ class Server:
         # Mettre les handler en ContextVar ?
 
     def run_Server(self):
-        self.logger.info("Server Starting...")
-        self.sock.listen()
+        # The listener is already bound and listening (transport.create_listener).
+        self.logger.info("Server starting (%s transport)...", transport.describe_transport())
         self.sock.setblocking(False)
         self.sel.register(self.sock, selectors.EVENT_READ, self.accept_wrapper)
         self.logger.info("Server registered successfully.")
@@ -121,7 +115,9 @@ class Server:
 
         # Namespace settup
         conn.setblocking(False)
-        data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"")
+        data = types.SimpleNamespace(
+            addr=addr, inb=b"", outb=b"", authenticated=False
+        )
 
         # READ only. A connected socket with an empty send buffer is *always*
         # writable, so registering EVENT_WRITE here makes sel.select() return
@@ -213,6 +209,18 @@ class Server:
         args = self.rpchandler.decode_params(request["params"])
 
         if command_type == "REGISTER":
+            # REGISTER is the first frame on every connection, so it is where we
+            # authenticate. Required because the loopback-TCP transport has no
+            # filesystem permissions to lean on: any local process can reach the
+            # port, but only one that can read .sillon/daemon.token can register.
+            if not secrets.compare_digest(
+                str(args.get("auth_token") or ""), str(self.auth_token or "")
+            ):
+                self.logger.warning("Rejected REGISTER with a bad auth token")
+                raise Exception("AuthenticationFailed: invalid daemon token")
+            data.authenticated = True
+
+            args.pop("auth_token", None)
             self.logger.info("Registering new simulation: %s", args)
             if not hasattr(self, "projEnvHandlers"):
                 # project_name matters: it is what names this project in the
@@ -235,6 +243,10 @@ class Server:
             data.run_id = args["run_id"]
             self.logger.info("Simulation and env handler created")
             return {"ack": True, "run_name": args["run_name"]}
+
+        if not data.authenticated:
+            self.logger.warning("Rejected %s on an unauthenticated connection", command_type)
+            raise Exception("AuthenticationFailed: connection did not REGISTER")
 
         if command_type not in self.command_registry:
             raise Exception(f"UnknownCommand: {command_type}")
@@ -296,7 +308,5 @@ class Server:
             self.logger.error("Failed to commit crashed run %s: %s", run_id, e)
 
     def _cleanup(self):
-        socket_path = get_socket_path(self.project_path)
-        pid_file = get_pidfile_path(self.project_path)
-        socket_path.unlink(missing_ok=True)
-        pid_file.unlink(missing_ok=True)
+        transport.clear_endpoint(self.project_path)
+        get_pidfile_path(self.project_path).unlink(missing_ok=True)

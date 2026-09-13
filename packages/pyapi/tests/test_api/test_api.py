@@ -12,6 +12,7 @@ from sillonpy.api import force_dump, set_context
 
 # Database query imports
 from silloncommon.database import (
+    sqlite_url,
     select_param_all,
     select_result_all,
     select_metadata_all,
@@ -52,7 +53,7 @@ def api_env():
     # Starting the tracker auto-spawns the project daemon if it isn't running.
     sp.init(project_name="api_integration_tests", project_path=str(CURRENT_PATH))
 
-    engine = create_engine("sqlite:///" + str(DB_PATH))
+    engine = create_engine(sqlite_url(DB_PATH))
 
     yield engine
 
@@ -65,7 +66,7 @@ def api_env():
 # ==========================================
 def test_api_track_decorator(clean_workspace):
     """Verifies the @track decorator intercepts args, kwargs, and saves results to HDF5."""
-    engine = create_engine("sqlite:///" + str(DB_PATH))
+    engine = create_engine(sqlite_url(DB_PATH))
 
     @sp.track(run_name="decorator_test", author="doph", save_result=True, project_path=str(CURRENT_PATH))
     def calculate_drag(velocity, area, drag_coeff=0.5):
@@ -234,7 +235,7 @@ def test_api_add_metadata_variations(api_env):
 
 def test_api_init_custom_fields(clean_workspace):
     """Verifies that custom init arguments make it all the way to the database."""
-    engine = create_engine("sqlite:///" + str(DB_PATH))
+    engine = create_engine(sqlite_url(DB_PATH))
 
     sp.init(
         run_name="Apollo_11",

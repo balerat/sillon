@@ -8,18 +8,17 @@ which only runs when select() times out, was never reached.
 
 import os
 import shutil
-import socket
 import subprocess
 import sys
-import textwrap
 import time
 from pathlib import Path
 
 import pytest
 
+from silloncommon import transport
+
 CURRENT_PATH = Path(__file__).parent.resolve()
 PROJECT = CURRENT_PATH / "_idle_project"
-SOCKET = PROJECT / ".sillon" / "daemon.sock"
 
 IDLE = 3.0           # the daemon's configured idle timeout for these tests
 GRACE = 12.0         # generous headroom: the loop ticks once a second
@@ -46,17 +45,20 @@ def _start_daemon():
     )
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
-        if SOCKET.exists():
-            try:
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.connect(str(SOCKET))
-                s.close()
-                return proc
-            except OSError:
-                pass
+        probe = transport.connect(str(PROJECT))
+        if probe is not None:
+            probe.close()
+            return proc
         time.sleep(0.05)
     proc.kill()
     pytest.fail("daemon did not become ready")
+
+
+def _attach_silently():
+    """A client that connects and then says nothing at all."""
+    sock = transport.connect(str(PROJECT))
+    assert sock is not None, "could not attach to the daemon"
+    return sock
 
 
 def _wait_for_exit(proc, timeout):
@@ -78,8 +80,7 @@ def test_daemon_exits_after_idle_timeout():
 def test_silent_client_does_not_keep_the_daemon_alive():
     """A connection that is open but says nothing must not defeat the timeout."""
     proc = _start_daemon()
-    silent = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    silent.connect(str(SOCKET))       # connect, then never send anything
+    silent = _attach_silently()       # connect, then never send anything
     try:
         assert _wait_for_exit(proc, IDLE + GRACE), (
             "a silent connection kept the daemon alive - EVENT_WRITE is "
@@ -95,8 +96,7 @@ def test_daemon_does_not_busy_spin_while_a_client_is_attached():
     psutil = pytest.importorskip("psutil")
 
     proc = _start_daemon()
-    silent = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    silent.connect(str(SOCKET))
+    silent = _attach_silently()
     try:
         handle = psutil.Process(proc.pid)
         handle.cpu_percent(None)      # prime the measurement

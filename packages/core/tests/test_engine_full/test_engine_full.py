@@ -15,7 +15,7 @@ from silloncore.engine import (
     get_run_details,
     add_metadata_to_runs,
 )
-from silloncommon.database import select_all
+from silloncommon.database import sqlite_url, select_all
 
 # --- Path Configurations ---
 CURRENT_PATH = Path(__file__).parent.resolve()
@@ -80,7 +80,7 @@ def populated_engine():
     time.sleep(0.5)
 
     # Connect to the database that the server just populated
-    engine = create_engine("sqlite:///" + str(DB_PATH))
+    engine = create_engine(sqlite_url(DB_PATH))
     yield engine
     engine.dispose()
 

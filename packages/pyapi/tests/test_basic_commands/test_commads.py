@@ -8,7 +8,7 @@ import uuid
 from sillonpy.serverCom import ServerCom
 from sillonpy.api import set_context
 from silloncommon.commands import LogParamCmd, LogResultCmd, DumpCmd
-from silloncommon.database import select_param_all, select_all
+from silloncommon.database import sqlite_url, select_param_all, select_all
 
 CURRENT_PATH = Path(__file__).parent.resolve()
 SILLON_PATH = CURRENT_PATH / Path(".sillon/")
@@ -50,7 +50,7 @@ def env():
     )
     # First ServerCom for this project_path auto-spawns the daemon; wait for
     # readiness rather than assuming it's already bound.
-    engine = create_engine("sqlite:///" + str(DB_PATH))
+    engine = create_engine(sqlite_url(DB_PATH))
 
     yield com, engine
 

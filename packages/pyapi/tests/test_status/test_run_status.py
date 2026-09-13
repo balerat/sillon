@@ -116,13 +116,18 @@ def test_uncaught_exception_records_the_cause():
 
 
 def test_killed_process_is_still_crashed():
-    """Guard on the path that already worked: no dump, daemon infers from disconnect."""
+    """Guard on the path that already worked: no dump, daemon infers from disconnect.
+
+    os._exit rather than SIGKILL: it is portable (Windows has no SIGKILL) and
+    exercises the same thing -- the process vanishes without running atexit, so
+    no dump is ever sent and the daemon has only the dropped connection to go on.
+    """
     _run_script(
         """
-        import os, signal, sillonpy as sp
+        import os, sillonpy as sp
         sp.init(run_name="killed_run", author="t", project_name="status")
         sp.log_param("x", 1)
-        os.kill(os.getpid(), signal.SIGKILL)
+        os._exit(1)
         """
     )
     assert _status_of("killed_run") == "CRASHED"

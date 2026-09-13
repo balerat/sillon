@@ -10,7 +10,7 @@ from pathlib import Path
 import toml
 from sqlmodel import create_engine
 
-from silloncommon.database import get_engine, migrate_schema
+from silloncommon.database import get_engine, migrate_schema, sqlite_url
 
 
 def resolve_storage_root(project_path) -> Path:
@@ -62,6 +62,6 @@ def resolve_engine(project_path):
         storage_root / ".sillon" / "database.sql",
     ):
         if candidate.exists():
-            return migrate_schema(create_engine("sqlite:///" + str(candidate)))
+            return migrate_schema(create_engine(sqlite_url(candidate)))
 
     raise FileNotFoundError(f"No sillon database found for project {project_path}")

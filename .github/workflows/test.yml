@@ -7,10 +7,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +23,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Run tests
+        # bash on every OS: the windows runner defaults to pwsh, which does not
+        # understand the backslash line continuations below.
+        shell: bash
+        run: |
+          pytest packages/common/tests packages/core/tests \
+                 packages/pyapi/tests packages/interface/sillonlab/tests \
+                 packages/interface/cli/tests
+
+  # Runs the Windows transport (loopback TCP) on Linux, so a regression in that
+  # path is caught even when the Windows legs are not the ones that break.
+  test-tcp-transport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install (with dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run tests over the TCP transport
+        env:
+          SILLON_TRANSPORT: tcp
         run: |
           pytest packages/common/tests packages/core/tests \
                  packages/pyapi/tests packages/interface/sillonlab/tests \
