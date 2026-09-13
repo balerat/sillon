@@ -9,6 +9,7 @@ import toml
 from sqlmodel import SQLModel, Session
 
 from silloncommon.database import insert_simulation, create_default_engine_root
+from silloncommon import registry
 from .glob import Glob, get_hash
 
 # .sillon file structure
@@ -21,7 +22,8 @@ from .glob import Glob, get_hash
 #           glob /
 #                   uuid /
 #                   ...
-PROJECT_LIST = Path("~/.config/sillon/registery.toml").expanduser()
+# The machine-wide project registry lives in silloncommon.registry, which
+# resolves the right per-OS config location and owns the file format.
 
 
 class ProjectEnvironmentHandler:
@@ -111,25 +113,22 @@ class ProjectEnvironmentHandler:
         self._sql_session = Session(self._engine)
         self._db_path = self._storage_root / Path("database.sql")
 
-    def _create_project_list(self):
-        os.makedirs(PROJECT_LIST.parent, exist_ok=True)
-        with open(PROJECT_LIST, "w") as f:
-            toml.dump({"project": {}}, f)
-
     def _add_project(self):
-        if not PROJECT_LIST.exists():
-            self._create_project_list()
-        with open(PROJECT_LIST, "r") as f:
-            data = toml.load(f)
-        data.setdefault("project", {})[str(self._project_id)] = {
-            "project_name": self._project_name,
-            "project_id": str(self._project_id),
-            "project_path": str(self._project_path),
-            "project_sil": str(self._sillon_dir),
-            "project_storage": str(self._storage_root),
-        }
-        with open(PROJECT_LIST, "w") as f:
-            toml.dump(data, f)
+        """Record this project in the machine-wide registry.
+
+        Never fatal: the registry is a convenience index for finding projects
+        later, so a failure to write it must not lose the run being logged.
+        """
+        try:
+            registry.upsert(
+                project_id=self._project_id,
+                project_path=self._project_path,
+                project_name=self._project_name,
+                sillon_dir=self._sillon_dir,
+                storage_root=self._storage_root,
+            )
+        except Exception:
+            pass
 
     def get_config(self):
         """Retrieves the current project configuration.
@@ -178,10 +177,18 @@ class ProjectEnvironmentHandler:
         run.glob.commit_result()
         run.glob.commit_parameter()
         run.glob.close()
-        table = insert_simulation(run, self._sql_session)
-        self._sql_session.commit()
-        self._sql_session.refresh(table)
-        return table.id
+        try:
+            table = insert_simulation(run, self._sql_session)
+            self._sql_session.commit()
+            self._sql_session.refresh(table)
+            return table.id
+        except Exception:
+            # One Session serves every run for the daemon's whole life, so a
+            # failed commit left un-rolled-back puts it in a failed-transaction
+            # state and every *later* run raises PendingRollbackError. One bad
+            # run must not take the rest of the session down with it.
+            self._sql_session.rollback()
+            raise
 
     def _change_config(self, **kwargs):
         for key, item in kwargs.items():

@@ -25,9 +25,11 @@ pyenv/
 site/
 
 sandbox/
-examples/
 data/
 profiling.txt
 .idea/
 .claude/
 .envrc
+
+# Example projects are tracked; the stores they create when run are not.
+examples/**/.sillon/

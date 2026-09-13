@@ -17,6 +17,7 @@ Example:
 """
 
 from sillonlab.project import Project, load_project
+from sillonlab.projects import list_projects, open_project
 from sillonlab.run import Run, RunCollection
 
 
@@ -40,4 +41,12 @@ def delete_run(run: Run) -> dict:
     return run.delete()
 
 
-__all__ = ["Project", "load_project", "Run", "RunCollection", "delete_run"]
+__all__ = [
+    "Project",
+    "load_project",
+    "open_project",
+    "list_projects",
+    "Run",
+    "RunCollection",
+    "delete_run",
+]

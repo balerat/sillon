@@ -1,14 +1,27 @@
-# `sillonpy` API reference
+# `sillonpy` — logging API
 
-The Python client you import in simulation scripts to log runs. See the
-[Logging runs](../guide/logging.md) guide for examples.
+The client you import inside a simulation script. See
+[Logging runs](../guide/logging.md) for worked examples.
+
+```python
+import sillonpy as sp
+```
+
+## Opening a run
 
 ::: sillonpy.api
     options:
       members:
-        - init
-        - track
         - track_run
+        - init
+        - force_dump
+        - track
+
+## Logging values
+
+::: sillonpy.api
+    options:
+      members:
         - log_param
         - log_result
         - log_figure
@@ -16,4 +29,3 @@ The Python client you import in simulation scripts to log runs. See the
         - log_metadata
         - add_note
         - add_tag
-        - force_dump

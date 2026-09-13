@@ -300,11 +300,14 @@ def load_run_result(storage_root, snapshot: dict, name: str):
         data = read_glob(storage_root, snapshot["uuid"], "result", name)
         if data is not None:
             return data
-        print(snapshot["artifacts"])
-        print(snapshot["results"][name])
         if snapshot["artifacts"].get(name) is not None:
             return snapshot["results"][name]
-        raise AttributeError(f"No result found for {snapshot["results"][name]}.")
+        # LookupError, to match this function's documented contract and the two
+        # sibling raises below -- callers catch LookupError, not AttributeError.
+        raise LookupError(
+            f"Result '{name}' of run '{snapshot['name']}' is recorded in the "
+            "database but missing from the run's HDF5 store."
+        )
 
     if name in snapshot["artifacts"]:
         return load_run_artifact(storage_root, snapshot, name)
@@ -590,7 +593,13 @@ def match_heavy(storage_root, snapshot: dict, results: dict = None, analyses: di
                 continue  # missing -> excluded by _match_conditions
             value = data.get(("result", name))
             if value is None:  # artifact result or plain DB value
-                value = load_run_result(storage_root, snapshot, name)
+                try:
+                    value = load_run_result(storage_root, snapshot, name)
+                except LookupError:
+                    # The run claims this result but its data is gone. That run
+                    # simply does not match -- filtering a project must not be
+                    # aborted by one damaged run among thousands.
+                    return False
             values[name] = value
         if not _match_conditions(values, results):
             return False
@@ -602,7 +611,10 @@ def match_heavy(storage_root, snapshot: dict, results: dict = None, analyses: di
                 continue
             value = data.get(("analysis", name))
             if value is None:
-                value = load_run_analysis(storage_root, snapshot, name)
+                try:
+                    value = load_run_analysis(storage_root, snapshot, name)
+                except LookupError:
+                    return False  # see the result branch above
             values[name] = value
         if not _match_conditions(values, analyses):
             return False

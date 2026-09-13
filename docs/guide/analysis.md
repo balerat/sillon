@@ -1,123 +1,182 @@
-# Analysis
+# Querying and analysis
 
-`sillonlab` loads a project's logged runs into Python — in a script or a notebook — so you can
-explore, query, and post-process them. It reads the same `.sillon/` store your runs were logged
-to; nothing needs to be running.
+`sillonlab` is the notebook and script side of sillon: load a project, filter
+its runs, read the data back.
 
 ```python
 import sillonlab as sl
-
-project = sl.load_project()            # current directory, or load_project("path/to/project")
-project.show()                          # pretty overview of every run
 ```
 
-## Getting runs
+## Loading a project
 
 ```python
-run = project.get("my_fit")            # one run, by name or uuid
-runs = project.runs()                   # a RunCollection of all runs
-run.show()                              # detail card: params, results (+sizes), figures, notes
+project = sl.load_project()             # the current directory
+project = sl.load_project("~/work/sweep")
+project = sl.open_project("Shaking Lattice")   # by registered name
 ```
 
-## Reading a run
+`open_project` accepts a name from `sl.list_projects()` (a unique prefix is
+enough), so you do not have to remember paths. See [Projects](projects.md).
 
-Lightweight fields are plain attributes; heavy values are loaded on demand (from HDF5/artifacts):
+## Looking around
 
 ```python
-run.parameters          # {"learning_rate": 0.01, ...}
-run.results             # names of results + artifacts
-run.tags, run.notes, run.metadata, run.status, run.runtime
-
-run.load_result("coef")          # array read back from the glob
-run.load_parameter("grid")       # big-array param read back from the glob
-run.load_figure("fit")           # path to the figure file
-run.load_source()                # the script that produced the run
-run.fetch_result("coef", "out/") # copy a result/artifact/figure to disk
-run.sizes()                      # storage footprint per stored item
+project.show()                  # the overview table, same as `sillon context`
+project.runs()                  # a RunCollection of every run
+project.runs().list()           # just the names
+run = project.get("my_fit")     # one run, by name, uuid, or uuid prefix
 ```
+
+In Jupyter, a project, a run and a collection all render as tables.
 
 ## Querying
 
-`project.query(...)` finds runs by any combination of criteria (all combined with AND). Cheap
-filters (parameters, metadata, tags, date, status) are resolved straight from the database; result
-and analysis **value predicates** read the glob, but only for the runs that already passed the
-cheap filters.
+`project.query()` filters with plain Python. There is no query language to
+learn: pass a value to match it, or a callable to test it.
 
 ```python
-# parameters: equality (bare kwargs) or predicates
-project.query(optimizer="adam")
-project.query(learning_rate=lambda lr: lr < 0.1)
+# exact matches
+project.query(degree=3)
+project.query(tags="baseline", fields={"status": "SUCCESS"})
 
-# metadata, tags, status, date
-project.query(metadata={"dataset": "mnist"})
-project.query(tags="baseline")
-project.query(fields={"status": "SUCCESS"}, after="2026-06-01")
+# predicates
+project.query(parameters={"degree": lambda d: d > 2})
+project.query(results={"rmse": lambda v: v < 0.1})
 
 # presence
-project.query(has_result="coef", has_analysis="fit_rmse")
+project.query(has_result="coef", has_artifact="mesh", has_tag="gpu")
 
-# result / analysis value predicates (these read the glob)
-project.query(results={"final_loss": lambda v: v < 0.05})
-project.query(analyses={"fit_rmse": lambda v: v < 1e-3})
-
-# combine freely — cheap filters run first, so this only opens the prod runs' globs
-project.query(tags="prod", optimizer="adam", results={"loss": lambda v: v < 0.1})
+# time
+project.query(after="2026-01-01", before="2026-06-30")
 ```
 
-`RunCollection.where(...)` takes the exact same arguments to filter an already-loaded collection:
+Filters combine with AND:
 
 ```python
-runs.where(optimizer="adam").where(results={"loss": lambda v: v < 0.1})
+best = project.query(
+    tags="sweep",
+    parameters={"ridge": lambda r: r == 0.0},
+    results={"rmse": lambda v: v < 5.0},
+)
 ```
 
-## Tables
+!!! tip "Put cheap filters first"
+    Filters on parameters, tags, status and dates are answered from the
+    database. Filters on `results` and `analyses` have to open the HDF5 store,
+    and run **only** on what the cheap filters left. Narrowing on a parameter
+    before filtering on a result is what keeps a large project fast.
+
+## Working with a collection
+
+`query()` and `runs()` return a `RunCollection`:
 
 ```python
-project.runs().to_dataframe()                       # one row per run, a column per parameter
-project.query(tags="prod").to_dataframe(metadata=True, results=True)
+runs = project.query(tags="sweep")
+
+len(runs)                       # how many
+runs[0]                         # by position
+runs["my_fit"]                  # by name or uuid
+runs[:5]                        # a slice, still a RunCollection
+for run in runs: ...            # iterate
+
+runs.sort_by("rmse")            # by a parameter or result name
+runs.sort_by("rmse", reverse=True)
+runs.sort_by(lambda r: r.runtime)
+
+runs.filter(lambda r: "gpu" in r.tags)
+runs.where(has_result="coef")   # further narrowing, chainable
+
+runs.show()                     # print a table
+runs.to_dataframe()             # pandas
 ```
 
-## Annotating and post-processing
-
-You can write back to finished runs — add notes/tags/metadata, or attach **analyses**:
-derived data you compute later and want to keep with the run.
+The common question, in one line:
 
 ```python
-run.add_note("kept for the paper")
-run.add_tag("reviewed")
-run.add_metadata("reviewer", "alice")
-
-# attach post-processed data, then reload it anytime
-import numpy as np
-run.add_analysis("fit_on_grid", np.polyval(run.load_result("coef"), np.linspace(0, 1, 50)),
-                 comment="evaluated on a fine grid")
-run.load_analysis("fit_on_grid")
+best_five = project.query(tags="sweep").sort_by("rmse")[:5]
 ```
 
-## Exporting and reporting
+Runs missing the sort key sort last, in both directions, so a partially-logged
+run never displaces a real result.
+
+## Reading a run
 
 ```python
-run.export("my_fit.npz")                 # results + analyses as npz / npy / hdf5
-run.report("my_fit_report.zip", with_data=True)   # manifest + readable report + source (+ data)
-run.manifest()                           # the same report as a dict
+run = project.get("my_fit")
+
+run.parameters      # {'degree': 1}
+run.results         # names of the logged results
+run.metadata
+run.tags
+run.notes
+run.runtime
+
+coef = run.load_result("coef")       # arrays come back from HDF5
+run.load_parameter("grid")
+run.load_metadata("sillon.python.cwd")
+run.load_source()                    # the script that produced the run
 ```
 
-## Lineage
-
-When a run was started with `sp.init(inherit=...)`, only the relationship is stored (nothing is
-copied). It's queryable from both ends, as walkable `Run` handles:
+Files:
 
 ```python
-run.parents()      # runs this run derives from — e.g. run.parents()[0].load_parameter("lr")
-run.children()     # runs that derive from this one
-run.parent_links() # the raw [{"uuid", "name"}] edges
+run.load_artifact("mesh")            # path inside the store
+run.load_figure("fit")
+run.fetch_result("coef", dest="out/") # copy it out to your own directory
 ```
 
-## Comparing and deleting
+Asking for something a run does not have raises `LookupError` naming the run —
+it never silently returns a placeholder.
+
+## DataFrames
 
 ```python
-project.compare("my_fit", "my_fit_2")    # parameter + source diff
-run.delete()                             # remove a run (data + database row) — irreversible
+df = project.query(tags="sweep").to_dataframe()
+df = project.runs().to_dataframe(metadata=True, results=True)
 ```
 
-See the [`sillonlab` API reference](../reference/sillonlab.md) for the full surface.
+One row per run; columns for name, timestamp, status, runtime, and every
+parameter. `results=True` reads the array store, so it is slower — ask for it
+when you want it.
+
+Needs pandas: `pip install "sillon[analysis]"`.
+
+## Annotating after the fact
+
+```python
+run.add_tag("publication")
+run.add_note("Used in figure 3")
+run.add_metadata("reviewed_by", "AL")
+```
+
+## Storing derived data
+
+Computed something from a run and want it kept with the run?
+
+```python
+spectrum = np.fft.rfft(run.load_result("field"))
+run.add_analysis("spectrum", spectrum, method="rfft")
+
+run.load_analysis("spectrum")
+```
+
+Analyses live beside results in the store and are queryable the same way
+(`project.query(analyses={"spectrum": ...})`).
+
+## Exporting
+
+```python
+run.export("out/", format="npz")     # npz, npy or hdf5
+run.report("out/")                   # a self-contained bundle
+run.manifest()                       # what the run holds
+run.sizes()                          # how much space it takes
+```
+
+## Housekeeping
+
+```python
+project.rename(run, "better_name")
+project.delete_run(run)              # removes the row and its stored data
+project.compare("run_a", "run_b")    # what differs between two runs
+project.find_by_hash("out/fig.png")  # which run produced this file
+```

@@ -1,109 +1,155 @@
-# sillon
+<h1 align="center">sillon</h1>
 
-**Git for simulations** — log, track, and analyze your simulation runs.
+<p align="center">
+  <strong>Git for simulations</strong> — log, track and query your simulation runs.
+</p>
 
-sillon records the parameters, results, metadata, figures, and source code of every run into a
-local store (SQLite + HDF5), then lets you explore and compare those runs from the command line
-or from a notebook. It is designed for researchers who run many simulations and want to keep
-track of what produced what.
+<p align="center">
+  <a href="https://pypi.org/project/sillon/"><img alt="PyPI" src="https://img.shields.io/pypi/v/sillon"></a>
+  <a href="https://pypi.org/project/sillon/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/sillon"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+</p>
 
-> Status: 1.0. The Python logging API, the background server, the CLI, and the analysis
-> library are functional. See the [roadmap](#roadmap) for what is not yet implemented.
+---
 
-## Install
+You ran the simulation four months ago. The figure is in the paper draft. Which
+parameters produced it, and is the array it was plotted from still on disk?
+
+sillon answers that. It records the parameters, results, figures, metadata and
+source of every run into a local store, and gives you a CLI and a Python API to
+query them afterwards. It is local-first, needs no server and no account, and is
+built for people who run parameter sweeps rather than training loops.
 
 ```bash
-pip install sillon              # the full toolchain
-pip install "sillon[analysis]"  # also installs pandas for to_dataframe()
+pip install sillon
 ```
 
-For development from a clone (editable install with test/build tooling):
+## Log a run
 
-```bash
-pip install -e ".[dev]"         # or: make install
-```
-
-Either way you get two console commands: `sillon` (the CLI) and `sillon-server-daemon` (the
-logging server, launched automatically by the Python API).
-
-## Quickstart — logging a run
+Three lines in a script you already have:
 
 ```python
 import sillonpy as sp
-import numpy as np
 
-sp.init(run_name="my_fit", project_name="demo")   # starts/at­taches to the project store
-
-x = np.linspace(0, 10, 100)
-sp.log_param("degree", 1)
-coef = np.polyfit(x, 1.3 * x + 5, 1)
-sp.log_result("coef", coef)                        # heavy arrays go to HDF5 automatically
-
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots(); ax.plot(x, np.polyval(coef, x))
-sp.log_figure(fig, name="fit", used=["coef"], caption="Linear fit")  # figure + data provenance
-
-sp.add_tag("baseline"); sp.add_note("first attempt")
+with sp.track_run(run_name="my_fit", project_name="demo"):
+    sp.log_param("degree", 1)                  # what you chose
+    coef = np.polyfit(x, y, 1)
+    sp.log_result("coef", coef)                # what came out
+    sp.add_tag("baseline")
 ```
 
-Run your script normally (`python my_script.py`). A run is stored under `.sillon/`. Re-running
-with the same `run_name` auto-increments it (`my_fit`, `my_fit_2`, ...), so nothing is overwritten.
+Run it normally. No setup step, no `sillon init` — the first call creates
+`.sillon/` next to your script. Large arrays go to HDF5 automatically; runs are
+never overwritten.
 
-## Quickstart — analyzing runs
+## Look at it
+
+```bash
+sillon context            # every run in the project
+sillon show my_fit        # one run in detail
+sillon projects           # every project on this machine, and where it is
+```
+
+```text
+╭─ Project ──────────────────────────────────────────────────────╮
+│  10 runs logged in the project                                 │
+│                                                                │
+│    ID          Run Name        When       Params  Assets  Status   │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
+│    39629020    trusting_cannon just now     2       2    SUCCESS   │
+│    7e7e5330    happy_perlman   just now     2       2    CRASHED   │
+╰────────────────────────────────────────────────────────────────╯
+```
+
+## Query it
+
+Plain Python — no query language:
 
 ```python
 import sillonlab as sl
 
-project = sl.load_project()          # defaults to the current directory
-project.show()                       # pretty overview of all runs
+project = sl.load_project()
 
-run = project.get("my_fit")
-run.show()                           # detail card: params, results (+sizes), figures, notes
-coef = run.load_result("coef")       # read the array back from HDF5
-project.query(degree=1, has_result="coef").to_dataframe()   # filter + tabulate
+best = project.query(
+    tags="sweep",
+    parameters={"degree": lambda d: d <= 3},   # cheap: filtered in SQL
+    results={"rmse": lambda v: v < 0.1},       # heavy: only on what survived
+).sort_by("rmse")[:5]
 
-# attach post-processed data to an existing run for later reuse
-run.add_analysis("fit_on_grid", np.polyval(coef, np.linspace(0, 1, 50)), comment="fine grid")
-
-# bundle a run's full context (manifest + readable report + source) into a zip
-run.report("my_fit_report.zip", with_data=True)
+print(best.to_dataframe())
 ```
 
-## CLI overview
+## What makes it different
 
-Run from inside a project directory:
+**The record is trustworthy.** A run that crashed is recorded as `CRASHED`, with
+the exception type and message — never as a success. A log call that fails
+raises instead of silently dropping your data.
 
-```bash
-sillon context                       # overview of all runs
-sillon search -p optimizer=adam -r coef   # find runs by parameter / result / artifact
-sillon show my_fit -p -r             # detailed parameters and results
-sillon compare my_fit my_fit_2       # parameter + source diff
-sillon add my_fit --tag production --note "kept"
-sillon grab my_fit -r coef --dest ./out      # fetch a result/artifact as a file
-sillon report my_fit --with-data     # export a context bundle zip
-sillon prune --older-than 30d        # free disk space (keeps metadata by default)
+**Figures remember their data.** `log_figure(fig, used=["coef", "degree"])`
+records what drew the plot, so `sillon show -f` can tell you months later:
+
+```text
+fit  ← built from: coef, degree
 ```
 
-See [docs/cli.md](docs/cli.md) for the full reference.
+**Runs remember their ancestry.** `track_run(inherit="baseline")` records a
+lineage edge you can walk with `sillon lineage`, `run.parents()` and
+`run.children()`.
 
-## Packages
+**Files remember their run.** Everything is content-hashed, so
+`sillon whose figures/fit.png` tells you which run produced a file you found.
 
-| Package | Role |
+**It stays out of the way.** Zero configuration, a background daemon you never
+start, and heavy arrays offloaded without you thinking about it.
+
+## Documentation
+
+| | |
 |---|---|
-| `silloncommon` | Data layer: ORM models, queries, command protocol |
-| `silloncore` | Engine (single source of truth), logging server, HDF5/glob storage |
-| `sillonpy` | Python client API used inside simulation scripts |
-| `silloncli` | The `sillon` command-line tool |
-| `sillonlab` | Analysis library for scripts and notebooks |
+| [Quickstart](docs/getting-started/quickstart.md) | five minutes, end to end |
+| [Core concepts](docs/getting-started/concepts.md) | the mental model — read once |
+| [Logging runs](docs/guide/logging.md) | the whole logging API |
+| [Querying and analysis](docs/guide/analysis.md) | working with many runs |
+| [Provenance and lineage](docs/guide/provenance.md) | figures, ancestry, hashes |
+| [CLI reference](docs/reference/cli.md) | every command |
+| [Troubleshooting](docs/guide/troubleshooting.md) | when something breaks |
 
-## Testing
+Runnable [examples](examples/): a quickstart, a parameter sweep, and figure
+provenance.
+
+## Requirements
+
+Python 3.11+, Linux or macOS. Windows is not supported yet — the client and the
+daemon talk over a Unix domain socket.
+
+## How it works
+
+Your script sends what it logs to a small per-project background daemon, which
+writes to SQLite (light values, so filtering is fast) and HDF5 (heavy arrays).
+The CLI and `sillonlab` both read through one engine, so they never disagree.
+See [Architecture](docs/dev/architecture.md).
+
+## Status and roadmap
+
+The logging API, the daemon, the CLI and the analysis library are in daily use.
+
+Not implemented yet, despite appearing in older notes: `sillon run`
+(reproduction), `sillon watch`, `sillon estimate`, a GUI, Slurm integration, and
+non-Python clients. If a command is not in the [CLI reference](docs/reference/cli.md),
+it does not exist.
+
+## Contributing
 
 ```bash
+git clone https://github.com/balerat/sillon
+cd sillon
+pip install -e ".[dev]"
 make test
 ```
 
-## Roadmap
+See [Contributing](docs/dev/contributing.md) and
+[Development setup](docs/dev/development.md).
 
-Not yet implemented: a GUI, a collaborative web platform, Slurm integration, run
-reproduction/relaunch (`sillon run`), a live-monitoring TUI (`sillon watch`), resource
-estimation (`sillon estimate`), and native client APIs for other languages.
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).

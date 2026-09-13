@@ -1,132 +1,174 @@
 # Logging runs
 
-You log runs from inside your simulation script with the **`sillonpy`** client. A run captures
-parameters, results, metadata, tags, notes, figures, and your script's source — written to a
-local `.sillon/` store by a background server that `sillonpy` starts for you.
+Everything in `sillonpy`, the client you import inside a simulation script.
 
 ```python
 import sillonpy as sp
 ```
 
-## Start a run
+## Opening a run
+
+### `track_run` — the recommended form
+
+A context manager. Opens a run and seals it on the way out, including when the
+block raises.
+
+```python
+with sp.track_run(run_name="my_fit", project_name="demo", author="you"):
+    sp.log_param("degree", 1)
+```
+
+Use it in a loop for a sweep — each iteration is its own run:
+
+```python
+for degree in range(1, 6):
+    with sp.track_run(project_name="sweep"):
+        sp.log_param("degree", degree)
+        ...
+```
+
+### `init` — for a script that is one run
 
 ```python
 sp.init(run_name="my_fit", project_name="demo")
+sp.log_param("degree", 1)
+# sealed automatically when the interpreter exits
 ```
 
-`init` attaches the script to a project (a `.sillon/` folder, created on first use). Useful
-optional arguments: `project_path=` (where the `.sillon/` lives, defaults to the working
-directory), `author=`, `organisation=`.
+Call `sp.force_dump()` to seal it early, for instance before starting a second
+run in the same script.
 
-!!! tip "Names never clash"
-    If `run_name` already exists, sillon auto-increments it (`my_fit`, `my_fit_2`, …), so
-    re-running a script never overwrites a previous run.
+All arguments are optional:
 
-## Parameters
+| Argument | Default |
+|---|---|
+| `run_name` | a generated name, unique in the project |
+| `project_name` | empty |
+| `project_path` | the current directory |
+| `author`, `organisation` | empty |
+| `inherit` | no parent — see [Provenance](provenance.md) |
+
+### `@track` — logging a function's call
+
+Records a decorated function's arguments, duration and return value under
+generated keys. Handy for quick instrumentation, noisy for a real experiment:
 
 ```python
-sp.log_param("learning_rate", 0.01)
-sp.log_param({"optimizer": "adam", "epochs": 100})   # a dict logs several at once
-sp.log_param(seed=42)                                 # or keyword arguments
+@sp.track
+def simulate(alpha, beta):
+    return alpha * beta
 ```
 
-Small values are stored inline in the database (and are fast to query). **Large NumPy arrays are
-offloaded to HDF5 automatically** — you log them the same way:
+## Logging values
+
+### Parameters — what you chose
 
 ```python
-import numpy as np
-sp.log_param("grid", np.linspace(0, 1, 100_000))      # stored in the glob, not the DB
+sp.log_param("degree", 3)                       # one
+sp.log_param({"degree": 3, "solver": "lu"})     # a dict
+sp.log_param(degree=3, solver="lu")             # keywords
 ```
 
-## Results
+### Results — what came out
 
 ```python
-sp.log_result("final_loss", 0.012)                    # a metric
-sp.log_result("coef", np.polyfit(x, y, 1))            # an array -> HDF5 glob
-sp.log_result("checkpoint", path="model.pt")          # a file -> saved as an artifact
-sp.log_result({"acc": 0.97, "f1": 0.95})              # several at once
+sp.log_result("rmse", 0.043)
+sp.log_result("field", big_array)      # offloaded to HDF5 automatically
 ```
 
-By default a file given with `path=` is copied into the run's storage (`save_result=True`); pass
-`save_result=False` to record only a pointer to the file in place.
+Large arrays are staged to disk and handed to the daemon without ever being
+serialised into the message, so logging a gigabyte costs you a file write, not
+memory.
 
-## Figures (with data provenance)
-
-Log a matplotlib figure and record *what data produced it* — the key feature for answering
-"which run/data made this plot?" months later:
+### Artifacts — files you produced
 
 ```python
-import matplotlib.pyplot as plt
+sp.log_result("mesh", path="out/mesh.vtk")                    # copied into the store
+sp.log_result("scratch", path="tmp/big.dat", save_result=False)  # path recorded only
+```
 
+`save_result=False` records the path and its hash without copying the bytes —
+right for something huge that already lives somewhere durable.
+
+### Figures
+
+```python
 fig, ax = plt.subplots()
-ax.plot(x, np.polyval(coef, x))
-sp.log_figure(fig, name="fit", used=["coef"], caption="Linear fit")
+ax.plot(x, y)
+
+sp.log_figure(fig, name="fit", used=["coef", "degree"],
+              caption="Linear fit over the noisy sample")
 ```
 
-`used=` lists the parameter/result names the figure was built from. You can also log an
-already-saved image with `path="figure.png"`.
+`used=` is the part worth using. It records which logged values produced the
+plot, so `sillon show my_fit -f` can tell you later:
 
-## Metadata, tags, and notes
+```text
+fit  ← built from: coef, degree
+```
+
+You can log an existing image instead:
 
 ```python
-sp.add_metadata("dataset", "mnist")          # or a dict
-sp.log_metadata("epochs", 100)                 # log_metadata is an alias of add_metadata
-sp.add_tag("baseline")                         # or a list of tags
-sp.add_note("first attempt with the new solver")
+sp.log_figure(path="figures/fit.png", name="fit")
 ```
 
-These are all stored in the database and are cheap to [query](analysis.md) later (metadata can
-be queried by its short key, e.g. `project.query(metadata={"dataset": "mnist"})`).
-
-## Tracking a function
-
-The `@sp.track` decorator logs a function's arguments, duration, and return value automatically:
+### Metadata, tags and notes
 
 ```python
-@sp.track(run_name="sweep", save_result=True)
-def run_experiment(lr, epochs):
-    ...
-    return final_loss
+sp.add_metadata("solver_version", "4.2")
+sp.add_metadata({"cluster": "atlas", "queue": "long"})
+
+sp.add_tag("baseline")
+sp.add_tag("gpu", "overnight")          # several at once
+sp.add_note("Re-ran after fixing the boundary condition")
 ```
 
-## Deriving from a previous run (lineage)
+`log_metadata` is an alias of `add_metadata`.
 
-Start a run that derives from a previous one — load it with `sillonlab` and pass it to `init`.
-This **only records the relationship**; nothing is copied, so each run still logs its own data
-(no duplicated parameters or arrays):
+Some metadata is recorded for you on every run: hostname, working directory,
+the source of your main script, the imported modules, the runtime, and the
+final status.
+
+## What types can I log?
+
+Anything JSON-serialisable, plus numpy arrays and scalars, complex numbers and
+`Path` objects. Arrays go to HDF5, the rest inline.
+
+A custom object will be refused with a message naming the type:
+
+```text
+TypeError: Object of type Simulation is not JSON serializable.
+Convert it to a dict, list, or string before logging.
+```
+
+## When something goes wrong
+
+Failed log calls **raise**. If the daemon rejects a command, your script hears
+about it rather than continuing with an incomplete record:
+
+```text
+Exception: UnknownCommand: no_such_command
+```
+
+That is deliberate — a silently dropped value would mean a run that claims data
+it does not have. See [Troubleshooting](troubleshooting.md).
+
+## Multiple runs in one script
 
 ```python
-import sillonpy as sp
-import sillonlab as sl
-
-base = sl.load_project().get("base_run")     # the run this one builds on
-sp.init(run_name="tuned", inherit=base)       # records a lineage link to base_run
-sp.log_param("lr", 0.001)                      # log this run's own parameters as usual
+for config in configs:
+    with sp.track_run(project_name="sweep"):
+        ...
 ```
 
-`inherit` accepts a `sillonlab.Run` or a run name/uuid in the same project (the parent must
-already exist). The link is queryable afterwards — `run.parents()`, `run.children()`, and
-`sillon lineage <run>` — and you can walk back to read a parent's parameters:
-`run.parents()[0].load_parameter("lr")`.
+`track_run` is the simple answer. With `init`, seal each run with
+`sp.force_dump()` before starting the next.
 
-## Finishing a run
-
-A run is finalized (runtime, status, source committed, data flushed) automatically when your
-script exits. To log several runs in one script, the cleanest option is the `track_run` context
-manager, which seals the run when the block ends:
+## Logging to another directory
 
 ```python
-with sp.track_run(run_name="sweep-1", project_name="demo"):
-    sp.log_param("lr", 0.01)
-    ...
-# run is sealed here; the next `with sp.track_run(...)` starts a fresh one
+sp.init(project_path="/scratch/experiments/run-42")
 ```
 
-You can also finalize manually with `force_dump()`:
-
-```python
-from sillonpy.api import force_dump
-force_dump()
-```
-
-See the [`sillonpy` API reference](../reference/sillonpy.md) for full signatures.
+Handy on a cluster where the job runs somewhere other than your project folder.

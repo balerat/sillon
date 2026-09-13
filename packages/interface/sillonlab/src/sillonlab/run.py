@@ -484,8 +484,17 @@ class RunCollection:
 
     def __getitem__(self, key):
         if isinstance(key, str):
+            # Names are known without a database round trip, so try them first.
             for run in self._runs:
-                if run.name == key or run.uuid == key:
+                if run.name == key:
+                    return run
+            # `uuid` is only populated once a run's snapshot is loaded, so a
+            # uuid lookup on a freshly returned query() collection used to miss
+            # every time. Load lazily, and only if the name pass found nothing.
+            for run in self._runs:
+                if run.uuid is None:
+                    run._load_snapshot()
+                if run.uuid == key:
                     return run
             raise KeyError(f"No run named '{key}' in the collection.")
         if isinstance(key, slice):
@@ -535,6 +544,51 @@ class RunCollection:
             predicate (Callable[[Run], bool]): A function tested on each run.
         """
         return RunCollection([run for run in self._runs if predicate(run)])
+
+    def sort_by(self, key, reverse: bool = False) -> "RunCollection":
+        """Returns a new collection ordered by `key`.
+
+        `key` is either a callable taking a Run, or the name of a parameter or
+        result to order on -- so the common question ("my five best runs") is
+        one call:
+
+        ```python
+        best = project.query(status="SUCCESS").sort_by("final_loss")[:5]
+        worst_first = runs.sort_by(lambda r: r.runtime, reverse=True)
+        ```
+
+        Runs missing the named key sort last, whatever the direction, so a
+        partially-logged run never displaces a real result.
+
+        Args:
+            key (Callable[[Run], Any] | str): A key function, or a parameter or
+                result name.
+            reverse (bool): Descending order. Defaults to False.
+
+        Returns:
+            RunCollection: A new collection; the original is left untouched.
+        """
+        if callable(key):
+            return RunCollection(sorted(self._runs, key=key, reverse=reverse))
+
+        missing = object()
+
+        def _lookup(run):
+            if key in run.parameters:
+                return run.parameters[key]
+            if key in run.results:
+                try:
+                    return run.load_result(key)
+                except LookupError:
+                    return missing
+            return missing
+
+        decorated = [(_lookup(run), run) for run in self._runs]
+        present = [(value, run) for value, run in decorated if value is not missing]
+        absent = [run for value, run in decorated if value is missing]
+
+        present.sort(key=lambda pair: pair[0], reverse=reverse)
+        return RunCollection([run for _, run in present] + absent)
 
     def where(
         self,
@@ -641,13 +695,19 @@ class RunCollection:
 
         rows = []
         for run in self._runs:
+            # Load first: timestamp and status are plain attributes that stay
+            # None until the snapshot is fetched. Runs from Project.runs() are
+            # pre-filled, runs from Project.query() are not -- reading them
+            # inside the dict literal gave query() results two all-null columns
+            # and no error.
+            parameters = run.parameters  # forces _load_snapshot()
             row = {
                 "name": run.name,
                 "timestamp": run.timestamp,
                 "status": run.status,
                 "runtime": run.runtime,
             }
-            row.update(run.parameters)
+            row.update(parameters)
             if metadata:
                 row.update(run.metadata)
             if results:

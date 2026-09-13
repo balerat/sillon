@@ -266,7 +266,9 @@ class Simulation:
         # TODO: Add overwrite check if needed
         if isinstance(value, dict) and value.get("__sillon_array_ref__"):
             staging_path = Path(value["staging_path"])
-            pointer, hsh = self.glob.save_param_from_staging(name, staging_path)
+            pointer, hsh = self.glob.save_param_from_staging(
+                name, staging_path, value.get("hash")
+            )
             self.parameters[name] = {
                 "__sillon_array_ref__": True,
                 "pointer": pointer,
@@ -350,7 +352,9 @@ class Simulation:
         # Treat large array case:
         elif isinstance(data, dict) and data.get("__sillon_array_ref__"):
             staging_path = Path(data["staging_path"])
-            pointer, hsh = self.glob.save_from_staging(name, staging_path)
+            pointer, hsh = self.glob.save_from_staging(
+                name, staging_path, data.get("hash")
+            )
             self.results[name] = ResultItem(pointer, hsh=hsh)
                 
         elif data is not None:

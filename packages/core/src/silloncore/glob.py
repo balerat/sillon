@@ -3,33 +3,13 @@
 
 import h5py
 import os
-import pickle
-import hashlib
 from pathlib import Path
 
+# Re-exported: get_hash now lives in silloncommon so the client can compute
+# the same digest before staging a large array, sparing the daemon from
+# loading the data purely to hash it.
+from silloncommon.hashing import get_hash
 
-def get_hash(input_data):  # Don't work for directories for now
-    """Generates a SHA-256 hash for a given file or Python object.
-
-    If the input is a valid file path string, it hashes the file's contents. 
-    Otherwise, it serializes the Python object using pickle and hashes the 
-    resulting bytes. Note: This does not currently support hashing directories.
-
-    Args:
-        input_data (str | Any): A file path string or any picklable Python object.
-
-    Returns:
-        str: The hexadecimal SHA-256 hash string.
-    """
-    if isinstance(input_data, str) and os.path.isfile(input_data):
-        with open(input_data, "rb") as f:
-            digest = hashlib.file_digest(f, "sha256")
-            return digest.hexdigest()
-    else:
-        data_bytes = pickle.dumps(input_data)
-        sha256 = hashlib.sha256()
-        sha256.update(data_bytes)
-        return sha256.hexdigest()
 
 def read_glob(storage_root, uuid, group, pointer):
     """Reads a dataset from a run's HDF5 glob file under a given storage root.
@@ -229,14 +209,38 @@ class Glob:
         self.results.append((f"{name}", result_object))
         return name, get_hash(result_object)
 
-    def save_from_staging(self, name:str, staging_path: Path):
-        """Claims a pre-written staging hdf5 file by reading its dataset and writing it into the permanent glob, then deletes the staging file"""
-        with h5py.File(staging_path, "r") as f:
-            data = f["data"][()]
-        pointer, hsh = self.save(name, data)
-        staging_path.unlink(missing_ok=True)
+    def save_from_staging(self, name: str, staging_path: Path, hsh: str = None):
+        """Claims a staged array into the glob without ever loading it.
 
-        return pointer, hsh
+        The copy happens inside HDF5 (H5Ocopy), so the bytes go staging file ->
+        glob file without passing through this process. Reading it into python
+        first -- and then holding it in `self.results` until dump -- meant the
+        daemon's memory grew with every large array a run logged, and the
+        staging file was already deleted, so RAM held the only copy.
+
+        Written through immediately rather than queued: there is nothing to
+        queue, the data is already on disk.
+
+        Args:
+            name (str): Target dataset name.
+            staging_path (Path): The client's staging file.
+            hsh (str): Digest computed client-side by `write_staging_array`.
+
+        Returns:
+            tuple: `(pointer, sha256_hash)`.
+        """
+        return self._claim_staged("result", name, staging_path, hsh)
+
+    def _claim_staged(self, group_name: str, name: str, staging_path: Path, hsh: str):
+        group = self.file.require_group(group_name)
+        if name in group:
+            print(f"Duplicate {group_name} dataset")
+            del group[name]
+        with h5py.File(staging_path, "r") as src:
+            src.copy(src["data"], group, name=name)
+        self.file.flush()
+        staging_path.unlink(missing_ok=True)
+        return name, hsh
 
     def save_param(self, name, param_object):
         """Queues a heavy parameter to be saved to the 'parameter' group.
@@ -254,14 +258,13 @@ class Glob:
         self.parameters.append((f"{name}", param_object))
         return name, get_hash(param_object)
 
-    def save_param_from_staging(self, name: str, staging_path: Path):
-        """Claims a staging hdf5 file into the permanent glob 'parameter' group, then deletes it."""
-        with h5py.File(staging_path, "r") as f:
-            data = f["data"][()]
-        pointer, hsh = self.save_param(name, data)
-        staging_path.unlink(missing_ok=True)
+    def save_param_from_staging(self, name: str, staging_path: Path, hsh: str = None):
+        """Claims a staged parameter array into the glob without loading it.
 
-        return pointer, hsh
+        The `parameter` mirror of `save_from_staging`; see it for why this
+        streams instead of reading.
+        """
+        return self._claim_staged("parameter", name, staging_path, hsh)
 
 
     def commit_result(self):
@@ -284,9 +287,10 @@ class Glob:
                     del res_group[name]
 
                 res_group.create_dataset(name, data=data)
-            except TypeError as e:
+            except Exception as e:
+                # See commit_parameter: h5py raises more than TypeError.
                 print(
-                    f"Failed to save data: {e}. Ensure 'data' is a NumPy array or compatible type."
+                    f"Failed to save result '{name}': {e}. Ensure 'data' is a NumPy array or compatible type."
                 )
         self.file.flush()  # Forces write to disk
 
@@ -296,20 +300,26 @@ class Glob:
         Mirrors `commit_result`: requires the 'parameter' group, overwrites any
         duplicate dataset, and flushes to disk.
         """
-        try:
-            param_group = self.file.require_group("parameter")
+        param_group = self.file.require_group("parameter")
 
-            for name, data in self.parameters:
+        for name, data in self.parameters:
+            # try inside the loop, as in commit_result: wrapping the whole loop
+            # meant one un-writable parameter silently discarded every parameter
+            # queued after it, and skipped the flush as well.
+            try:
                 if name in param_group:
                     print("Duplicate parameter dataset")
                     del param_group[name]
 
                 param_group.create_dataset(name, data=data)
-            self.file.flush()
-        except TypeError as e:
-            print(
-                f"Failed to save parameter: {e}. Ensure 'data' is a NumPy array or compatible type."
-            )
+            except Exception as e:
+                # Not just TypeError: h5py also raises ValueError and OSError for
+                # data it cannot store, and those used to escape and abort the
+                # entire commit.
+                print(
+                    f"Failed to save parameter '{name}': {e}. Ensure 'data' is a NumPy array or compatible type."
+                )
+        self.file.flush()
 
     def commit_source(self, source):
         """Saves the main source code string into the HDF5 metadata group.

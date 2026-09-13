@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 analysis = ["pandas"]                 # sillonlab.to_dataframe lazy-imports pandas and guards
-dev = ["sillon[analysis]", "pytest", "build", "twine"]
+dev = ["sillon[analysis]", "pytest", "psutil", "build", "twine"]  # psutil: daemon CPU/RSS assertions
 docs = ["mkdocs-material>=9.5.0", "mkdocstrings[python]>=0.24.0"]
 
 [project.urls]

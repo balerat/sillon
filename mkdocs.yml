@@ -43,14 +43,20 @@ plugins:
 
 nav:
   - Home: index.md
-  - User Guide:
-      - Install: guide/install.md
+  - Getting started:
+      - Install: getting-started/install.md
+      - Quickstart: getting-started/quickstart.md
+      - Core concepts: getting-started/concepts.md
+  - Guide:
       - Logging runs: guide/logging.md
-      - Command line: guide/cli.md
-      - Analysis: guide/analysis.md
-      - API reference:
-          - sillonpy: reference/sillonpy.md
-          - sillonlab: reference/sillonlab.md
+      - Querying and analysis: guide/analysis.md
+      - Working with projects: guide/projects.md
+      - Provenance and lineage: guide/provenance.md
+      - Troubleshooting: guide/troubleshooting.md
+  - Reference:
+      - Command line: reference/cli.md
+      - sillonpy: reference/sillonpy.md
+      - sillonlab: reference/sillonlab.md
   - Contributing & Internals:
       - Contributing: dev/contributing.md
       - Development setup: dev/development.md

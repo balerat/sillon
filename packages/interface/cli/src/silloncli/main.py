@@ -15,6 +15,7 @@ import silloncli.commands.delete as delete
 import silloncli.commands.rename as rename
 import silloncli.commands.whose as whose
 import silloncli.commands.lineage as lineage
+import silloncli.commands.projects as projects
 
 from silloncommon import __version__
 
@@ -36,7 +37,13 @@ COMMAND_LIST = {
     "rename": rename,
     "whose": whose,
     "lineage": lineage,
+    "projects": projects,
 }
+
+
+# Commands that answer questions about the machine rather than about one
+# project, and so must work from any directory.
+PROJECT_INDEPENDENT = {"projects"}
 
 
 def command_launcher(engine, storage_root, args):
@@ -91,6 +98,13 @@ def cli():
     init_parsers(command_subparser)
 
     args = parser.parse_args()
+
+    # -- Project-independent commands run before the in-a-project check -- #
+    if args.command in PROJECT_INDEPENDENT:
+        args_dict = vars(args)
+        args_dict.pop("command")
+        COMMAND_LIST["projects"].command(None, None, args_dict)
+        return
 
     # -- Getting the Path -- #
     project_dir = Path.cwd()

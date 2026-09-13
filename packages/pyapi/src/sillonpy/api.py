@@ -27,6 +27,11 @@ from .tracker import Tracker
 _context = ContextVar("simulation_tracker_context", default=None)
 
 
+def _current_context():
+    """The active Tracker, or None. For callers that must tolerate no run."""
+    return _context.get()
+
+
 def get_context():
     """Fetches the current simulation tracker context.
 
@@ -36,10 +41,17 @@ def get_context():
     Returns:
         Tracker: The active Tracker instance.
     """
-    try:
-        return _context.get()
-    except AttributeError:
-        raise RuntimeError("Tracker has not been initialized ! Please initialize it witht he context track_run ")
+    # A ContextVar declared with default=None never raises LookupError (nor
+    # AttributeError), so the missing-tracker case has to be an explicit None
+    # check. Without it every log_* call failed with "'NoneType' object has no
+    # attribute ..." instead of saying what the user actually forgot.
+    ctx = _context.get()
+    if ctx is None:
+        raise RuntimeError(
+            "No active sillon run. Call sillonpy.init() first, or wrap your "
+            "code in `with sillonpy.track_run(): ...`"
+        )
+    return ctx
 
 
 def set_context(ctx):
@@ -57,7 +69,7 @@ def _finalize():
     Ensures that when the run is finished or the script exits, the context's 
     `close` method is called to safely flush data and cut the connection.
     """
-    cx = get_context()
+    cx = _current_context()
     if cx is not None:
         cx.close()
 
@@ -94,7 +106,7 @@ def init(
             copied); walk back to the parent later via `run.parents` to read
             its parameters. The parent must already exist in the project.
     """
-    if get_context() is None:
+    if _current_context() is None:
         simulation_tracker = Tracker(
             run_name=run_name,
             project_name=project_name,
@@ -184,7 +196,7 @@ def track(
     @wraps(func)
     def wrapper(*args, **kwargs):
         # 1. Initialize Context if it doesn't exist
-        if get_context() is None:
+        if _current_context() is None:
             init(
                 run_name=run_name,
                 organisation=organisation,
@@ -535,7 +547,14 @@ def track_run(**kwargs):
         Tracker: The active tracker for the run.
     """
     init(**kwargs)
+    tracker = get_context()
     try:
-        yield get_context()
+        yield tracker
+    except BaseException as exc:
+        # Marked here as well as in the excepthook: an exception caught above
+        # the `with` never reaches the hook, but the run is still sealed on the
+        # way out of this block and must not be recorded as a success.
+        tracker.mark_failed(type(exc), exc)
+        raise
     finally:
         force_dump()

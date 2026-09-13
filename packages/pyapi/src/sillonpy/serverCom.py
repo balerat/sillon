@@ -1,5 +1,6 @@
 import json
 import socket
+from pathlib import Path
 
 from silloncommon.rpcHandler import RPCHandler
 from silloncommon.commands import ShutDownCmd, DumpCmd
@@ -78,16 +79,20 @@ class ServerCom:
         This function will tell the server to dump the content of the run to the database.
         """
         command = DumpCmd()
-        self.execute_command(command)
-        # We then close the connection to the server properly
-        self.sock.close()
+        try:
+            self.execute_command(command)
+        finally:
+            # Close even when the dump failed, so a raised error does not leave
+            # the socket open and the daemon holding a half-finished connection.
+            self.sock.close()
 
     def shutdown_server(self):
         command = ShutDownCmd()
-        self.execute_command(command)
-
-        # Server should be down, closing connection
-        self.sock.close()
+        try:
+            self.execute_command(command)
+        finally:
+            # Server should be down, closing connection
+            self.sock.close()
 
     def execute_command(self, p_Command):
         # Connects to the server if not already done
@@ -102,15 +107,21 @@ class ServerCom:
         # Awaiting for a response from the server
         reply = recv_msg(self.sock)
 
-        # Return the decoded response
-        try:
-            decoded = self.rpc_handler.decode_response(reply.decode("utf-8"))
-            self.command_id += 1
-            if decoded.get("error") is not None:
-                print(f"[SILLONPY] Failure to execute command: {decoded.get("error")}")
-            else:
-                return decoded["result"]
-            
-        except Exception as e:
-            print(f"[SILLONPY] Failure to execute command: {e}")
-            return None
+        # Advance the id for every request that actually went out, whatever the
+        # answer turns out to be. Skipping it on failure desynchronises our ids
+        # from the ones the server is replying to.
+        self.command_id += 1
+
+        if reply is None:
+            raise ConnectionError(
+                "The sillon daemon closed the connection without answering "
+                f"'{p_Command.method}'. See "
+                f"{Path(self.project_path) / '.sillon' / 'daemon.log'}"
+            )
+
+        # decode_response raises on a top-level "error", so a server-side failure
+        # reaches the caller instead of being printed and discarded. Letting it
+        # propagate is the point: a swallowed error here means the run commits
+        # without the data it claims to have.
+        decoded = self.rpc_handler.decode_response(reply.decode("utf-8"))
+        return decoded["result"]

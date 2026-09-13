@@ -1,6 +1,7 @@
 import uuid
 from pathlib import Path
 import os
+import sys
 import time
 
 from .serverCom import ServerCom
@@ -63,7 +64,48 @@ class Tracker:
         self.server.connect_server()
         self.cwd = os.getcwd()
         self.callstack = {}
+        # None until something claims an outcome. close() only reports a status
+        # when this is set; otherwise the server's default promotion applies.
+        self.status = None
+        self._install_excepthook()
         self.metadata_pysillon()
+
+    def _install_excepthook(self):
+        """Notice an unhandled exception so the run is not sealed as a success.
+
+        close() runs from an atexit hook, and atexit fires on a normal exit and
+        on a crash alike -- so without this the tracker cannot tell them apart
+        and a simulation that died is recorded as SUCCESS. sys.excepthook is the
+        only place a script-level unhandled exception is observable
+        (sys.last_value is set by the interactive interpreter, not by scripts).
+
+        The previous hook is kept and still called, so tracebacks print exactly
+        as before and any other library's hook keeps working.
+        """
+        previous_hook = sys.excepthook
+
+        def sillon_excepthook(exc_type, exc_value, exc_tb):
+            self.mark_failed(exc_type, exc_value)
+            previous_hook(exc_type, exc_value, exc_tb)
+
+        sys.excepthook = sillon_excepthook
+
+    def mark_failed(self, exc_type, exc_value):
+        """Record that this run died, and why.
+
+        Idempotent, and deliberately never raises: it runs on the crash path,
+        where a second failure would bury the user's real traceback under ours.
+        """
+        if self.status is not None:
+            return
+        self.status = "CRASHED"
+        try:
+            self.add_metadata(
+                "sillon.error.type", getattr(exc_type, "__name__", str(exc_type))
+            )
+            self.add_metadata("sillon.error.message", str(exc_value))
+        except Exception:
+            pass
 
     def metadata_pysillon(self):
         """
@@ -89,7 +131,11 @@ class Tracker:
         """
         self.run_time = time.time() - self.start_time
         self.add_metadata("sillon.runtime", self.run_time)
-        # self.add_metadata("sillon.status", "SUCCESS")
+        # Report the outcome explicitly. The server only promotes a run to
+        # SUCCESS while its status is still RUNNING, so sending CRASHED here
+        # stops a failed run being sealed as a successful one.
+        if self.status is not None:
+            self.add_metadata("sillon.status", self.status)
 
         self.add_metadata("sillon.python.callstack", self.callstack)
         self.server.dump_run()  # When the simulation ends we ask the server to dump the simulation into the database

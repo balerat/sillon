@@ -1,3 +1,4 @@
+import os
 import traceback
 import socket
 import selectors
@@ -32,7 +33,10 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-IDLE_TIMEOUT = 300
+# Seconds of inactivity before an idle daemon shuts itself down. Override with
+# SILLON_IDLE_TIMEOUT; a long value suits a machine where you want the daemon to
+# stay warm between runs.
+IDLE_TIMEOUT = float(os.environ.get("SILLON_IDLE_TIMEOUT", 300))
 
 
 class Server:
@@ -119,8 +123,13 @@ class Server:
         conn.setblocking(False)
         data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"")
 
-        # Types of events to acknowledge when receiving data
-        events = selectors.EVENT_READ | selectors.EVENT_WRITE
+        # READ only. A connected socket with an empty send buffer is *always*
+        # writable, so registering EVENT_WRITE here makes sel.select() return
+        # instantly on every iteration: the daemon spins at 100% CPU and the
+        # idle check (which only runs when select() times out) is never reached.
+        # _handle_read adds write interest when there is actually a reply to
+        # send, and _handle_write drops it again once the buffer drains.
+        events = selectors.EVENT_READ
 
         # Wrap service_connection as a closure bound to this connection's data
         def handle(sock, mask):
@@ -206,7 +215,12 @@ class Server:
         if command_type == "REGISTER":
             self.logger.info("Registering new simulation: %s", args)
             if not hasattr(self, "projEnvHandlers"):
-                self.projEnvHandlers = ProjectEnvironmentHandler(args["project_path"])
+                # project_name matters: it is what names this project in the
+                # machine-wide registry that `sillon projects` reads. Passing
+                # only the path is why every registered project was unnamed.
+                self.projEnvHandlers = ProjectEnvironmentHandler(
+                    args["project_path"], project_name=args.get("project_name")
+                )
             # Ensure the run name is unique: increment on collision with a
             # finished run (DB) or an in-flight run (registered, not yet dumped).
             in_flight = [sim.run_name for sim in self.simulations.sim_dict.values()]
@@ -234,7 +248,11 @@ class Server:
         if command_type == "dump":
             try:
                 sim = self.simulations.sim_dict[run_id]
-                sim.status = "SUCCESS"
+                # Only promote when nothing claimed an outcome. The client sends
+                # "sillon.status" before dumping if its script died, and that
+                # verdict must win -- a run that raised is not a success.
+                if sim.status == "RUNNING":
+                    sim.status = "SUCCESS"
                 self.projEnvHandlers.commit_run(
                     self.simulations.sim_dict[run_id]
                 )

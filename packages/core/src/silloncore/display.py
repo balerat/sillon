@@ -61,6 +61,7 @@ _STATUS_STYLE = {
     "FAILED": f"bold #E06C75 on {c('hull')}",
     "FAILURE": f"bold #E06C75 on {c('hull')}",
     "KILLED": f"bold #E06C75 on {c('hull')}",
+    "CRASHED": f"bold #E06C75 on {c('hull')}",
     "RUNNING": f"bold {c('ember')} on {c('hull')}",
 }
 
@@ -346,3 +347,39 @@ __all__ = [
     "Group",
     "Text",
 ]
+
+
+def print_projects(records: list) -> None:
+    """Prints a `silloncore.projects.get_projects` payload.
+
+    Projects whose directory is gone are shown dimmed rather than hidden, so an
+    unmounted drive looks different from a project you never had.
+    """
+    table = themed_table(padding=(0, 2))
+    table.add_column("Project", style=f"bold {c('spray')}")
+    table.add_column("Runs", justify="center", style=c("wake"))
+    table.add_column("Last activity", style=S_DIM)
+    # The location is the answer to the question this command exists to ask, so
+    # it wraps rather than being ellipsized away on a narrow terminal.
+    table.add_column("Location", style=S_DIM, overflow="fold", ratio=1)
+
+    missing = 0
+    for record in records:
+        if record["exists"]:
+            name = Text(record["project_name"] or "(unnamed)")
+            runs = "?" if record["run_count"] is None else str(record["run_count"])
+            when = relative_time(record["last_activity"]) if record["last_activity"] else "—"
+            location = Text(record["project_path"])
+        else:
+            missing += 1
+            name = Text(record["project_name"] or "(unnamed)", style=S_DIM)
+            runs = "—"
+            when = "missing"
+            location = Text(record["project_path"], style=S_DIM)
+        table.add_row(name, runs, when, location)
+
+    summary = f"{len(records)} projects registered on this machine"
+    if missing:
+        summary += f" — {missing} no longer on disk (sillon projects --prune)"
+    subtitle = Text(summary, style=f"italic {c('ember')}")
+    console.print(themed_panel(Group(subtitle, Text(""), table), title="Projects"))
