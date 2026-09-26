@@ -2,6 +2,7 @@ site_name: Sillon Documentation
 site_description: log, track, and analyze simulation runs.
 repo_url: https://github.com/balerat/sillon
 repo_name: sillon
+use_directory_urls: false
 
 theme:
   name: material
