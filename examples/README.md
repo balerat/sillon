@@ -12,7 +12,7 @@ own `.sillon/` store next to itself — nothing is written outside the folder.
 ```bash
 cd examples/01-quickstart
 python run.py
-sillon context
+sillon list
 ```
 
 To start over, delete the `.sillon/` folder inside the example.

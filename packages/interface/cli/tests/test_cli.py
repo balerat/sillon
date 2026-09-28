@@ -12,8 +12,8 @@ from sqlmodel import SQLModel, Session, create_engine
 from silloncommon.database import sqlite_url, SimulationTable, ArtifactTable
 from silloncore.project_paths import resolve_engine, resolve_storage_root
 
-import silloncli.commands.search as search
-import silloncli.commands.grab as grab
+import silloncli.commands.query as query
+import silloncli.commands.fetch as fetch
 import silloncli.commands.prune as prune
 import silloncli.commands.report as report
 import silloncli.commands.show as show
@@ -70,31 +70,31 @@ def project(tmp_path):
 
 def test_search_by_parameter(project):
     engine, storage_root, _ = project
-    names = search.command(engine, storage_root, {"parameter": ["optimizer=adam"]})
+    names = query.command(engine, storage_root, {"parameter": ["optimizer=adam"]})
     assert names == ["exp"]
 
 
 def test_search_by_metadata_tag_status_date(project):
     engine, storage_root, _ = project
-    assert search.command(engine, storage_root, {"meta": ["sillon.language=python"]}) == ["exp"]
-    assert search.command(engine, storage_root, {"tag": ["prod"]}) == ["exp"]
-    assert search.command(engine, storage_root, {"status": "SUCCESS"}) == ["exp"]
-    assert search.command(engine, storage_root, {"status": "FAILED"}) == []
-    assert search.command(engine, storage_root, {"after": "2026-05-01"}) == ["exp"]
-    assert search.command(engine, storage_root, {"before": "2026-05-01"}) == []
+    assert query.command(engine, storage_root, {"meta": ["sillon.language=python"]}) == ["exp"]
+    assert query.command(engine, storage_root, {"tag": ["prod"]}) == ["exp"]
+    assert query.command(engine, storage_root, {"status": "SUCCESS"}) == ["exp"]
+    assert query.command(engine, storage_root, {"status": "FAILED"}) == []
+    assert query.command(engine, storage_root, {"after": "2026-05-01"}) == ["exp"]
+    assert query.command(engine, storage_root, {"before": "2026-05-01"}) == []
 
 
 def test_search_by_result_and_artifact(project):
     engine, storage_root, _ = project
-    assert search.command(engine, storage_root, {"result": ["coef"]}) == ["exp"]
-    assert search.command(engine, storage_root, {"artifact": ["mesh"]}) == ["exp"]
-    assert search.command(engine, storage_root, {"result": ["ghost"]}) == []
+    assert query.command(engine, storage_root, {"result": ["coef"]}) == ["exp"]
+    assert query.command(engine, storage_root, {"artifact": ["mesh"]}) == ["exp"]
+    assert query.command(engine, storage_root, {"result": ["ghost"]}) == []
 
 
 def test_grab_result(project, tmp_path):
     engine, storage_root, _ = project
     dest = tmp_path / "out"
-    path = grab.command(
+    path = fetch.command(
         engine, storage_root, {"run_name": "exp", "result": "coef", "dest": str(dest)}
     )
     assert path == dest / "coef.npy"
@@ -130,7 +130,7 @@ def test_prune_keep_metadata(project):
     assert result["pruned"] == ["exp"]
     assert not (base / ".sillon" / "glob" / RUN_UUID).exists()
     # metadata kept: the run is still searchable
-    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == ["exp"]
+    assert query.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == ["exp"]
 
 
 def test_delete_run(project):
@@ -140,7 +140,7 @@ def test_delete_run(project):
     assert result[0]["deleted"] == "exp"
     # storage gone and run no longer in the DB
     assert not (base / ".sillon" / "glob" / RUN_UUID).exists()
-    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == []
+    assert query.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == []
 
 
 def test_add_and_show(project, capsys):
@@ -158,8 +158,8 @@ def test_add_and_show(project, capsys):
 # ==========================================
 
 import silloncli.commands.rename as rename
-import silloncli.commands.whose as whose
-import silloncli.commands.context as context
+import silloncli.commands.trace as trace
+import silloncli.commands.list as list_cmd
 
 
 def test_show_full_card(project, capsys):
@@ -191,7 +191,7 @@ def test_rename_command(project, capsys):
     engine, storage_root, _ = project
     result = rename.command(engine, storage_root, {"run_name": "exp", "new_name": "exp_renamed"})
     assert result["status"] == "success"
-    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == ["exp_renamed"]
+    assert query.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == ["exp_renamed"]
 
 
 def test_rename_command_rejects_clash(project, capsys):
@@ -203,19 +203,19 @@ def test_rename_command_rejects_clash(project, capsys):
 
 def test_whose_command(project, capsys):
     engine, storage_root, _ = project
-    matches = whose.command(engine, storage_root, {"file": "h"})  # artifact 'mesh' hsh is 'h'
+    matches = trace.command(engine, storage_root, {"file": "h"})  # artifact 'mesh' hsh is 'h'
     assert matches[0]["run_name"] == "exp"
     assert matches[0]["name"] == "mesh"
 
 
 def test_whose_unknown(project, capsys):
     engine, storage_root, _ = project
-    assert whose.command(engine, storage_root, {"file": "nope"}) == []
+    assert trace.command(engine, storage_root, {"file": "nope"}) == []
 
 
 def test_context_overview_themed(project, capsys):
     engine, storage_root, _ = project
-    context.command(engine, storage_root, {"run_name": []})
+    list_cmd.command(engine, storage_root, {"run_name": []})
     out = capsys.readouterr().out
     assert "exp" in out
 
@@ -229,4 +229,4 @@ def test_prune_delete_metadata_with_yes(project):
     assert result["status"] == "success"
     assert not result["kept_metadata"]
     # fully gone from the DB
-    assert search.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == []
+    assert query.command(engine, storage_root, {"parameter": ["optimizer=adam"]}) == []

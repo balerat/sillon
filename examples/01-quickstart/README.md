@@ -4,7 +4,7 @@ One run, logged and stored.
 
 ```bash
 python run.py
-sillon context        # the project overview
+sillon list        # the project overview
 sillon show my_fit    # this run in detail
 ```
 

@@ -3,17 +3,18 @@ import sys
 from pathlib import Path
 
 from silloncore.project_paths import resolve_engine, resolve_storage_root
+from silloncore.engine import get_project_summary
+from silloncore.display import print_landing, print_landing_outside_project
 import silloncli.commands.show as show
 import silloncli.commands.add as add
-import silloncli.commands.context as context
-import silloncli.commands.compare as compare
-import silloncli.commands.search as search
-import silloncli.commands.grab as grab
+import silloncli.commands.list as list_cmd
+import silloncli.commands.query as query
+import silloncli.commands.fetch as fetch
 import silloncli.commands.prune as prune
 import silloncli.commands.report as report
 import silloncli.commands.delete as delete
 import silloncli.commands.rename as rename
-import silloncli.commands.whose as whose
+import silloncli.commands.trace as trace
 import silloncli.commands.lineage as lineage
 import silloncli.commands.projects as projects
 import silloncli.commands.versions as versions
@@ -30,15 +31,14 @@ the command themselves but also to initialize their parser.
 COMMAND_LIST = {
     "show": show,
     "add": add,
-    "context": context,
-    "compare": compare,
-    "search": search,
-    "grab": grab,
+    "list": list_cmd,
+    "query": query,
+    "fetch": fetch,
     "prune": prune,
     "report": report,
     "delete": delete,
     "rename": rename,
-    "whose": whose,
+    "trace": trace,
     "lineage": lineage,
     "projects": projects,
     "versions": versions,
@@ -115,16 +115,23 @@ def cli():
     # -- Getting the Path -- #
     project_dir = Path.cwd()
     if not (project_dir / ".sillon").exists():
-        print("Not in a sillon project.")
+        # A bare `sillon` outside a project is still a front door: say what
+        # this is and how to find your projects, rather than erroring out.
+        if args.command is None:
+            print_landing_outside_project(__version__)
+            return
+        print("Not in a sillon project. Try `sillon projects` to find them.")
         sys.exit(1)
 
     # -- Getting the engine and storage root (shared with sillonlab) -- #
     engine = resolve_engine(project_dir)
     storage_root = resolve_storage_root(project_dir)
 
-    # -- Execute the command (default to the context overview) -- #
+    # -- Bare `sillon`: the project at a glance -- #
     if args.command is None:
-        context.command(engine, storage_root, {"run_name": []})
+        print_landing(
+            get_project_summary(engine, storage_root, project_dir), __version__
+        )
         return
 
     command_launcher(engine, storage_root, args)

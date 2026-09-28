@@ -43,5 +43,5 @@ print(project.get("baseline").children().list())  # ['refined']
 no longer know where it came from:
 
 ```bash
-sillon whose path/to/that/file.png
+sillon trace path/to/that/file.png
 ```

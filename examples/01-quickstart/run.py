@@ -1,7 +1,7 @@
 """The smallest useful sillon script.
 
     python run.py
-    sillon context          # see the run you just logged
+    sillon list          # see the run you just logged
     sillon show my_fit      # see its parameters and results
 """
 
@@ -27,4 +27,4 @@ with sp.track_run(run_name="my_fit", project_name="quickstart", author="you"):
     sp.add_tag("baseline")
     sp.add_note("First attempt, noise sigma 0.4")
 
-print("Logged. Now try:  sillon context")
+print("Logged. Now try:  sillon list")

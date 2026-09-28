@@ -32,7 +32,7 @@ script and starts a background daemon to write into it.
 ## 2. Look at what you logged
 
 ```bash
-sillon context
+sillon list
 ```
 
 ```text
@@ -93,7 +93,7 @@ print(best.to_dataframe())
 or from the shell:
 
 ```bash
-sillon search -p degree=1 -t baseline
+sillon query -p degree=1 -t baseline
 ```
 
 ## Where to go next

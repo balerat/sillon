@@ -56,6 +56,7 @@ nav:
       - Working with projects: guide/projects.md
       - Provenance and lineage: guide/provenance.md
       - Troubleshooting: guide/troubleshooting.md
+      - Migrating to 2.0: guide/migrating-to-2.0.md
   - Reference:
       - Command line: reference/cli.md
       - sillonpy: reference/sillonpy.md

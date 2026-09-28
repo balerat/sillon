@@ -24,9 +24,9 @@ sl.open_project("Shaking Lattice")    # by name, a unique prefix is enough
 ### "Which runs used degree 3?"
 
 ```bash
-sillon search -p degree=3
-sillon search -p degree=3 solver=lstsq -t baseline --status SUCCESS
-sillon search --after 2026-01-01 --limit 20
+sillon query -p degree=3
+sillon query -p degree=3 solver=lstsq -t baseline --status SUCCESS
+sillon query --after 2026-01-01 --limit 20
 ```
 
 Values are parsed as Python literals, so `-p lr=0.01` compares as a float, not a
@@ -44,12 +44,12 @@ far the differing values moved.
 ### "Which run produced this file?"
 
 ```bash
-sillon whose figures/fit.png
-sillon whose 9f2c8a1e…            # or a bare SHA-256
+sillon trace figures/fit.png
+sillon trace 9f2c8a1e…            # or a bare SHA-256
 ```
 
 Works on **artifacts and figures** — files sillon copied into the store. It will
-*not* match a file produced by `sillon grab` or `run.export()`, because those
+*not* match a file produced by `sillon fetch` or `run.export()`, because those
 re-serialise the data and so hash differently from the original.
 
 ---
@@ -59,12 +59,12 @@ re-serialise the data and so hash differently from the original.
 ### "I just want this one array as a file"
 
 ```bash
-sillon grab fit_d1 -r coef
-sillon grab fit_d1 -r coef --dest out/
+sillon fetch fit_d1 -r coef
+sillon fetch fit_d1 -r coef --dest out/
 ```
 
 ```python
-run.fetch_result("coef", dest="out/")
+run.fetch("coef", dest="out/")
 ```
 
 ### "Give me everything this run produced"

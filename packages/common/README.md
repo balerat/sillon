@@ -1,10 +1,16 @@
-# Common
-Library for common features between client and server of the project
+# silloncommon
 
-This library contains :
-- commands made available to the user of sillon
-- JSON-RPC protocol related features for communication between the client and the server
-- Database api to use the Database
-- environment handler: will create the project env and configuration (the .sillon)
-- glob: Create the hdf5 glob to agregate the data and some hashing functions
-- Simulation: The simulation object used by the server to create simulation item.
+The data layer and wire protocol, shared by the client and the daemon. Imports
+nothing from the layers above it.
+
+| Module | Role |
+|---|---|
+| `database.py` | SQLModel tables, queries, engine construction, schema migration |
+| `commands.py`, `rpcHandler.py`, `framing.py` | the JSON-RPC command protocol |
+| `transport.py`, `socket_path.py` | AF_UNIX / loopback-TCP transport |
+| `hashing.py`, `codeversion.py`, `source_store.py` | content hashing and code versions |
+| `hdf5_staging.py` | large-array handoff |
+| `access_log.py` | which runs' data this process read, for automatic lineage |
+| `registry.py`, `user_paths.py` | the machine-wide project registry |
+
+Full documentation: [Architecture](../../docs/dev/architecture.md)

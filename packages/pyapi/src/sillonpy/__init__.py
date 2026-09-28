@@ -13,28 +13,26 @@ never start that daemon yourself.
 
 from .api import (
     init,
-    track,
+    autolog,
     track_run,
     force_dump,
     log_param,
     log_result,
     log_figure,
     add_metadata,
-    log_metadata,
     add_note,
     add_tag,
 )
 
 __all__ = [
     "init",
-    "track",
+    "autolog",
     "track_run",
     "force_dump",
     "log_param",
     "log_result",
     "log_figure",
     "add_metadata",
-    "log_metadata",
     "add_note",
     "add_tag",
 ]

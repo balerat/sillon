@@ -670,3 +670,98 @@ def print_similar_runs(result: dict) -> None:
         f"most like {result['run']}", style=f"italic {c('ember')}"
     )
     console.print(themed_panel(Group(subtitle, Text(""), table), title="Similar runs"))
+
+
+# --- the landing view -------------------------------------------------------
+
+_LOGO = r"""   ___ _ _ _
+  / __(_) | | ___  _ __
+  \__ \ | | |/ _ \| '_ \
+  |___/_|_|_|\___/|_| |_|"""
+
+
+def _logo_block(version: str):
+    """The wordmark, the tagline and the version, in the site's palette."""
+    logo = Text(_LOGO, style=f"bold {c('foam')}")
+    tail = Text.assemble(
+        ("\n  ~~~  ", c("wake")),
+        ("the wake your runs leave", f"italic {c('slate')}"),
+        ("        v", S_DIM),
+        (version, f"bold {c('ember')}"),
+    )
+    return Group(logo, tail)
+
+
+def print_landing(summary: dict, version: str) -> None:
+    """The view for a bare `sillon` inside a project."""
+    name = summary["name"] or Path(summary["path"]).name
+    header = Text.assemble(
+        (name, f"bold {c('foam')}"),
+        ("   ", ""),
+        (summary["path"], S_DIM),
+    )
+
+    counts = summary["status_counts"]
+    ok = counts.get("SUCCESS", 0)
+    bad = counts.get("CRASHED", 0) + counts.get("FAILED", 0) + counts.get("KILLED", 0)
+    running = counts.get("RUNNING", 0)
+
+    health = Text()
+    health.append(f"{ok} ok", style=c("foam") if ok else S_DIM)
+    if bad:
+        health.append(f" · {bad} crashed", style="bold #E06C75")
+    if running:
+        health.append(f" · {running} running", style=c("ember"))
+
+    table = themed_table(padding=(0, 2), show_header=False, box=None)
+    table.add_column("", style=S_LABEL)
+    table.add_column("", style=f"bold {c('spray')}")
+    table.add_column("", style=S_DIM)
+
+    when = relative_time(summary["last_activity"]) if summary["last_activity"] else "never"
+    table.add_row("Runs", str(summary["run_count"]), f"last {when}")
+    table.add_row("", "", health)
+
+    if summary["versions"]:
+        current = short_id(summary["current_version"] or "")
+        note = f"current {current}"
+        if summary["partial_versions"]:
+            note += "  (some recovered from the entry script only)"
+        table.add_row(
+            "Code",
+            f"{summary['versions']} version{'s' if summary['versions'] != 1 else ''}",
+            note,
+        )
+    else:
+        table.add_row("Code", "not versioned", "sillon versions --backfill")
+
+    table.add_row(
+        "Storage",
+        human_size(summary["bytes"]),
+        "daemon running" if summary["daemon_running"] else "daemon idle",
+    )
+
+    console.print(
+        themed_panel(
+            Group(_logo_block(version), Text(""), header, Text(""), table),
+            title=None,
+        )
+    )
+
+
+def print_landing_outside_project(version: str) -> None:
+    """The view for a bare `sillon` run anywhere else.
+
+    Still a front door: it says what sillon is and how to find your projects,
+    rather than an error and a non-zero exit.
+    """
+    body = Text.assemble(
+        ("You are not inside a sillon project.\n\n", c("spray")),
+        ("  sillon projects", f"bold {c('foam')}"),
+        ("     every project on this machine, and where it is\n", S_DIM),
+        ("  sillon --help", f"bold {c('foam')}"),
+        ("       everything else", S_DIM),
+    )
+    console.print(
+        themed_panel(Group(_logo_block(version), Text(""), body), title=None)
+    )

@@ -100,7 +100,7 @@ def command(engine, storage_root, args):
     if not runs:
         console.print(
             "[yellow]Specify a run (e.g. [b]sillon show my_run[/b]), "
-            "or use [b]sillon context[/b] for an overview.[/]"
+            "or use [b]sillon list[/b] to see them all.[/]"
         )
         return None
 

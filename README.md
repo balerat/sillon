@@ -45,7 +45,7 @@ never overwritten.
 ## Look at it
 
 ```bash
-sillon context            # every run in the project
+sillon list            # every run in the project
 sillon show my_fit        # one run in detail
 sillon projects           # every project on this machine, and where it is
 ```
@@ -109,7 +109,7 @@ tuned constant, and whether results moved — arrays by shape, dtype and hash,
 never element by element.
 
 **Files remember their run.** Everything is content-hashed, so
-`sillon whose figures/fit.png` tells you which run produced a file you found.
+`sillon trace figures/fit.png` tells you which run produced a file you found.
 
 **It stays out of the way.** Zero configuration, a background daemon you never
 start, and heavy arrays offloaded without you thinking about it.

@@ -331,24 +331,24 @@ is nearly everything, are covered.
 Every logged value and file is hashed. Given a file on disk:
 
 ```bash
-sillon whose figures/fit.png
+sillon trace figures/fit.png
 ```
 
 It hashes the file and finds the run that produced it. Works with a bare hash
 too, and from Python:
 
 ```python
-project.find_by_hash("figures/fit.png")
+project.trace("figures/fit.png")
 ```
 
 ## What changed between two runs?
 
 ```bash
-sillon compare baseline refined
+sillon diff baseline refined
 ```
 
 ```python
-project.compare("baseline", "refined")
+project.diff("baseline", "refined")
 ```
 
 Reports differing parameters, metadata, and whether the source code changed.

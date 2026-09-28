@@ -26,6 +26,6 @@ import sillonpy as sp
         - log_result
         - log_figure
         - add_metadata
-        - log_metadata
+        - add_metadata
         - add_note
         - add_tag

@@ -1,8 +1,12 @@
-# SimplyCore
+# silloncli
 
-The core package is a collection of tools for the tool chain that are neither shared lirbary function (common) or apis (api). It contains for now the server to log run, the cli tool and will contain in the future the collaborative platform, the analysis library and the gui.
+The `sillon` command-line tool.
 
-## Contains:
-- SimplyCLI -> cli
-- Server
-- SimplyGUI -> gui
+Every command is a thin renderer over `silloncore.engine`, which returns plain
+data — that is why the CLI and `sillonlab` never disagree, and why a new output
+format is cheap to add.
+
+- `main.py` — argument parsing and the command table
+- `commands/` — one module per command, each with `add_parser` and `command`
+
+Full documentation: [CLI reference](../../../docs/reference/cli.md)

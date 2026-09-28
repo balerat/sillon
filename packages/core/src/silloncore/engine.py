@@ -387,6 +387,8 @@ def load_run_source(storage_root, snapshot: dict):
     source = read_glob(storage_root, snapshot["uuid"], "metadata", "main_source")
     if source is not None:
         return source
+    # "simply.*" is the pre-rename spelling: runs logged before the project was
+    # renamed still carry it, and dropping it would make their source unreadable.
     for key in ("sillon.main_script_source", "simply.main_script_source"):
         if key in snapshot["meta_data"]:
             return snapshot["meta_data"][key]
@@ -1239,7 +1241,7 @@ def rename_run(engine, run_name: str, new_name: str) -> dict:
     return {"status": "success", "old": renamed["old"], "new": renamed["new"]}
 
 
-def find_by_hash(engine, file_or_hash) -> list:
+def trace(engine, file_or_hash) -> list:
     """Finds which run(s) own a file, by content hash.
 
     If given an existing file path, the file is hashed (`get_hash`); otherwise
@@ -1350,43 +1352,6 @@ def load_run_analysis(storage_root, snapshot: dict, name: str):
     if data is None:
         raise LookupError(f"Invalid analysis '{name}' for run '{snapshot['name']}'.")
     return data
-
-
-def compare(engine, run_id1, run_id2, storage_root=None) -> dict:
-    """Compares two runs. Kept for compatibility — prefer `diff`.
-
-    Now a thin adapter over `diff`, which reaches further (code logic vs tuned
-    constants, and results compared by shape/dtype/hash) and does not depend on
-    the old `Reference` loader, whose glob read resolved against the current
-    working directory and therefore only worked from the project root.
-
-    Args:
-        engine (Engine): The active SQLAlchemy database engine.
-        run_id1 (str): Baseline run name, uuid, or uuid prefix.
-        run_id2 (str): Target run.
-        storage_root (str | Path, optional): The project storage root. Without
-            it the source diff is skipped; parameters and context still work.
-
-    Returns:
-        dict: `{"status", "diff_param", "diff_status", "diff_runtime",
-            "diff_source"}`, the shape this function has always returned.
-    """
-    detail = diff(engine, storage_root, run_id1, run_id2)
-
-    return {
-        "status": "success",
-        "diff_param": {
-            "diff_data": {
-                key: (change["old"], change["new"], "N/A")
-                for key, change in detail["parameters"]["changed"].items()
-            },
-            "diff_key_added": set(detail["parameters"]["added"]),
-            "diff_key_removed": set(detail["parameters"]["removed"]),
-        },
-        "diff_status": detail["context"]["status"],
-        "diff_runtime": detail["context"]["runtime"],
-        "diff_source": detail["code"]["source_diff"],
-    }
 
 
 # ==========================================
@@ -1654,3 +1619,63 @@ def find_similar_runs(engine, run_id, limit: int = 10) -> dict:
         raise LookupError(f"Run '{run_id}' not found.")
 
     return {"run": target["name"], "matches": rank_similar(target, index, limit)}
+
+
+def get_project_summary(engine, storage_root, project_path) -> dict:
+    """Everything the landing view shows about a project, in one pass.
+
+    Deliberately cheap: one run-index fetch, one directory walk, one socket
+    probe. Nothing here opens a glob.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        storage_root (str | Path): The project storage root.
+        project_path (str | Path): The project root.
+
+    Returns:
+        dict: `{"name", "path", "run_count", "last_activity", "status_counts",
+            "versions", "current_version", "partial_versions", "bytes",
+            "daemon_running"}`.
+    """
+    from silloncommon import transport
+
+    from silloncore.project_paths import resolve_project_name
+
+    index = select_run_index(engine)
+
+    counts = {}
+    for entry in index:
+        counts[entry.get("status") or "UNKNOWN"] = counts.get(entry.get("status") or "UNKNOWN", 0) + 1
+    dates = sorted(e["date"] for e in index if e.get("date"))
+
+    groups = get_code_versions(engine)
+    named = [g for g in groups if g["logic_version"]]
+
+    total = 0
+    for path in Path(storage_root).rglob("*"):
+        try:
+            if path.is_file():
+                total += path.stat().st_size
+        except OSError:
+            continue
+
+    try:
+        sock = transport.connect(str(project_path))
+        daemon = sock is not None
+        if sock:
+            sock.close()
+    except Exception:
+        daemon = False
+
+    return {
+        "name": resolve_project_name(project_path),
+        "path": str(project_path),
+        "run_count": len(index),
+        "last_activity": dates[-1] if dates else None,
+        "status_counts": counts,
+        "versions": len(named),
+        "current_version": named[0]["logic_version"] if named else None,
+        "partial_versions": any(g.get("partial") for g in named),
+        "bytes": total,
+        "daemon_running": daemon,
+    }

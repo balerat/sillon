@@ -73,7 +73,12 @@ class ProjectEnvironmentHandler:
             self._storage_root = project_storage_root / "sillon-storage" /  f"{self._project_id}"
         else:
             self._storage_root = self._sillon_dir
-        self._config["Environment"] = {"project_id": str(self._project_id)}
+        self._config["Environment"] = {
+            "project_id": str(self._project_id),
+            # The name belongs to the project, not to this machine's registry.
+            # Kept here too so a copied or moved project keeps its identity.
+            "project_name": self._project_name or "",
+        }
         self._config["storage"] = {"storage_root": str(self._storage_root)}
 
     def _create_sillon_dir(self):
@@ -91,6 +96,17 @@ class ProjectEnvironmentHandler:
                 self._config = toml.load(f)
                 self._project_id = self._config["Environment"]["project_id"]
                 self._storage_root = Path(self._config["storage"]["storage_root"])
+
+            # A project created before the name was stored here, or one whose
+            # first run had no project_name, learns it from the first run that
+            # does. Written back so later readers find it.
+            recorded = self._config["Environment"].get("project_name") or ""
+            if self._project_name and self._project_name != recorded:
+                self._config["Environment"]["project_name"] = self._project_name
+                with open(self._config_path, "w", encoding="utf-8") as f:
+                    toml.dump(self._config, f)
+            elif recorded:
+                self._project_name = recorded
 
     def _raise_permission_sill(self):
         # POSIX-only: Windows' os.chmod honours nothing but the read-only bit,

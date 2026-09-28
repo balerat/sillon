@@ -1,7 +1,11 @@
 from pathlib import Path
 from typing import Optional
 
-from silloncore.project_paths import resolve_storage_root, resolve_engine
+from silloncore.project_paths import (
+    resolve_storage_root,
+    resolve_engine,
+    resolve_project_name,
+)
 from silloncore.engine import (
     get_project_context,
     get_run_details,
@@ -9,8 +13,10 @@ from silloncore.engine import (
     query_runs,
     delete_run as engine_delete_run,
     rename_run as engine_rename_run,
-    find_by_hash as engine_find_by_hash,
-    compare as engine_compare,
+    trace as engine_trace,
+    get_code_versions as engine_code_versions,
+    prune_runs as engine_prune,
+    get_project_context,
     diff as engine_diff,
     diff_across_runs as engine_diff_across,
     find_similar_runs as engine_find_similar,
@@ -74,34 +80,27 @@ class Project:
         # Storage-root and engine resolution is shared with the CLI (silloncore).
         self.storage_root = resolve_storage_root(self.path)
         self.engine = resolve_engine(self.path)
+        # The project's own name, from its config rather than this machine's
+        # registry, so it survives being copied or moved. "" when unset.
+        self.name = resolve_project_name(self.path)
 
     # ---------------------------------------------------------
     # Run access
     # ---------------------------------------------------------
 
-    def context(self, *run_names: str) -> dict:
-        """Fetches the context summary of the project or of specific runs.
-
-        Args:
-            *run_names (str): Optional run names to target. If omitted, the
-                project-wide overview is returned.
-
-        Returns:
-            dict: The engine context payload (`mode` and `runs` keys).
-        """
-        return get_project_context(self.engine, list(run_names) or None)
-
     def show(self, *run_names: str) -> None:
-        """Pretty-prints the project context, like `sillon context` does.
+        """Pretty-prints the project's runs, like `sillon list` does.
 
-        With no argument, an overview table of all runs is displayed. With
-        run names, a detail card is displayed for each targeted run. Works
-        in a terminal and in a jupyter notebook.
+        With no argument, an overview table of every run. With run names, a
+        detail card per run. Works in a terminal and in a jupyter notebook.
 
         Args:
             *run_names (str): Optional run names to target.
         """
-        print_context(self.context(*run_names), project_name=self.path.name)
+        print_context(
+            get_project_context(self.engine, list(run_names)),
+            project_name=self.name or self.path.name,
+        )
 
     def runs(self) -> RunCollection:
         """Loads all the runs of the project.
@@ -227,37 +226,6 @@ class Project:
         run._load_snapshot()  # Fail early if the run does not exist
         return run
 
-    def details(
-        self,
-        run_names=None,
-        parameters=None,
-        metadata=None,
-        results=None,
-    ) -> dict:
-        """Queries run details exactly like `sillon show` does.
-
-        Each category accepts a list of keys, a single key, or True to fetch
-        everything in that category.
-
-        Args:
-            run_names (str | list, optional): Run name(s) to target.
-            parameters (str | list | bool, optional): Parameter keys to fetch.
-            metadata (str | list | bool, optional): Metadata keys to fetch.
-            results (str | list | bool, optional): Result keys to fetch.
-
-        Returns:
-            dict: The engine payload with `parameter`, `metadata`, `result`
-                and `artifacts` keys, present only if requested.
-        """
-        wildcard = ["%all%"]
-        return get_run_details(
-            self.engine,
-            run_names=_as_list(run_names) or [],
-            params=wildcard if parameters is True else _as_list(parameters),
-            meta=wildcard if metadata is True else _as_list(metadata),
-            results=wildcard if results is True else _as_list(results),
-        )
-
     # ---------------------------------------------------------
     # Run annotation and comparison
     # ---------------------------------------------------------
@@ -307,7 +275,7 @@ class Project:
         name = run.name if isinstance(run, Run) else run
         return engine_rename_run(self.engine, name, new_name)
 
-    def find_by_hash(self, file_or_hash) -> list:
+    def trace(self, file_or_hash) -> list:
         """Finds which run(s) own a file, by its content hash.
 
         Pass a file path (it gets hashed) or a hash string. Useful to trace a
@@ -319,20 +287,7 @@ class Project:
         Returns:
             list[dict]: One `{run_name, run_uuid, kind, name}` per match.
         """
-        return engine_find_by_hash(self.engine, file_or_hash)
-
-    def compare(self, run_name1: str, run_name2: str) -> dict:
-        """Diffs two runs (parameters, context, source), like `sillon compare`.
-
-        Args:
-            run_name1 (str): The baseline run name.
-            run_name2 (str): The target run name.
-
-        Returns:
-            dict: The engine diff payload (`diff_param`, `diff_status`,
-                `diff_runtime`, `diff_source`).
-        """
-        return engine_compare(self.engine, run_name1, run_name2, self.storage_root)
+        return engine_trace(self.engine, file_or_hash)
 
     def diff(self, run_name1: str, run_name2: str, max_bytes: int = None) -> dict:
         """Compares two runs: parameters, code, results and context.
@@ -414,6 +369,51 @@ class Project:
         name = run.name if isinstance(run, Run) else run
         return engine_find_similar(self.engine, name, limit)["matches"]
 
+    def versions(self) -> list:
+        """The project's runs grouped by the code version that produced them.
+
+        The notebook counterpart of `sillon versions`. A version covers the
+        entry script and your own modules, hashed so a tuned constant does not
+        read as a change — see the Code versions guide.
+
+        Example:
+            ```python
+            for group in project.versions():
+                print(group["logic_version"][:8], group["run_count"])
+
+            current = project.versions()[0]["logic_version"]
+            clean = project.query(fields={"logic_version": current})
+            ```
+
+        Returns:
+            list[dict]: `{"logic_version", "run_count", "runs", "first_seen",
+                "last_seen", "constant_variants", "files", "partial"}`, most
+                recent first.
+        """
+        return engine_code_versions(self.engine)
+
+    def prune(self, run_names=None, before=None, keep_metadata: bool = True) -> dict:
+        """Frees disk space by deleting the stored data of selected runs.
+
+        With `keep_metadata` the database rows survive, so you still know what
+        you ran and with which parameters — only the heavy data goes. Set it
+        False to remove the rows too, which is irreversible.
+
+        Requires a scope: pass `run_names` or `before`, never neither.
+
+        Args:
+            run_names (list[str], optional): Runs to prune.
+            before (str, optional): Prune runs older than this date or age.
+            keep_metadata (bool): Keep the database rows. Defaults to True.
+
+        Returns:
+            dict: `{"pruned", "freed_bytes", ...}`.
+        """
+        return engine_prune(
+            self.engine, self.storage_root,
+            run_names=run_names, before=before, keep_metadata=keep_metadata,
+        )
+
     # ---------------------------------------------------------
     # Container protocol
     # ---------------------------------------------------------
@@ -430,7 +430,8 @@ class Project:
         return iter(self.runs())
 
     def __repr__(self):
-        return f"Project({self.path.name} @ {self.path})"
+        label = self.name or self.path.name
+        return f"Project({label} @ {self.path})"
 
 
 def load_project(project_path=None) -> Project:

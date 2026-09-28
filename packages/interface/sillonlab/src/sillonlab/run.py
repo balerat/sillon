@@ -308,7 +308,7 @@ class Run:
         self._note_read(name)
         return load_run_figure(self.storage_root, self._load_snapshot(), name)
 
-    def fetch_result(self, name: str, dest=None) -> Path:
+    def fetch(self, name: str, dest=None) -> Path:
         """Fetches a result, artifact, or figure as a file on disk.
 
         Artifacts and figures are copied as-is; glob results are saved as

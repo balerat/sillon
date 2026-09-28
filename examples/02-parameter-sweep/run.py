@@ -1,8 +1,8 @@
 """A parameter sweep: many runs from one script, then rank them.
 
     python run.py
-    sillon context
-    sillon search -p degree=3
+    sillon list
+    sillon query -p degree=3
 """
 
 import numpy as np

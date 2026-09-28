@@ -124,7 +124,7 @@ Two consequences worth knowing:
 ## Content hashing
 
 Every logged value is hashed. Two runs that produced identical data have the
-same hash, which is what makes `sillon whose <file>` able to tell you which run
+same hash, which is what makes `sillon trace <file>` able to tell you which run
 a file on disk came from.
 
 ## Lineage

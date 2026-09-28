@@ -65,3 +65,36 @@ def resolve_engine(project_path):
             return migrate_schema(create_engine(sqlite_url(candidate)))
 
     raise FileNotFoundError(f"No sillon database found for project {project_path}")
+
+
+def resolve_project_name(project_path) -> str:
+    """The project's own name, as recorded in its config.
+
+    Comes from `.sillon/config.toml` so it survives being copied or moved;
+    falls back to the machine-wide registry for projects created before the
+    name was stored there. Empty string when nothing knows it.
+
+    Args:
+        project_path (str | Path): The project root.
+
+    Returns:
+        str: The project name, or "".
+    """
+    config_path = Path(project_path).expanduser().resolve() / ".sillon" / "config.toml"
+    try:
+        name = toml.load(config_path).get("Environment", {}).get("project_name")
+        if name:
+            return name
+    except (OSError, toml.TomlDecodeError, KeyError):
+        pass
+
+    try:
+        from silloncommon import registry
+
+        resolved = str(Path(project_path).expanduser().resolve())
+        for entry in registry.entries():
+            if entry.get("project_path") == resolved and entry.get("project_name"):
+                return entry["project_name"]
+    except Exception:
+        pass
+    return ""

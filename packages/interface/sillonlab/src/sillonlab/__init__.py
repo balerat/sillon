@@ -22,25 +22,6 @@ from silloncommon.access_log import clear as _clear_reads, reads as _reads
 from sillonlab.run import Run, RunCollection
 
 
-def delete_run(run: Run) -> dict:
-    """Permanently deletes a run (its stored data and database row).
-
-    Convenience wrapper around `Run.delete()`.
-
-    Args:
-        run (Run): The run handle to delete.
-
-    Returns:
-        dict: `{"status": "success", "deleted": str, "freed_bytes": int}`,
-            or an error status if the run no longer exists.
-    """
-    if not isinstance(run, Run):
-        raise TypeError(
-            "delete_run expects a Run object; to delete by name use "
-            "project.delete_run(name)."
-        )
-    return run.delete()
-
 
 def forget_reads() -> None:
     """Forget which runs' data this session has read.
@@ -80,7 +61,6 @@ __all__ = [
     "list_projects",
     "Run",
     "RunCollection",
-    "delete_run",
     "forget_reads",
     "pending_reads",
 ]

@@ -68,7 +68,7 @@ def test_api_track_decorator(clean_workspace):
     """Verifies the @track decorator intercepts args, kwargs, and saves results to HDF5."""
     engine = create_engine(sqlite_url(DB_PATH))
 
-    @sp.track(run_name="decorator_test", author="doph", save_result=True, project_path=str(CURRENT_PATH))
+    @sp.autolog(run_name="decorator_test", author="doph", save_result=True, project_path=str(CURRENT_PATH))
     def calculate_drag(velocity, area, drag_coeff=0.5):
         time.sleep(0.1)
         return velocity * area * drag_coeff

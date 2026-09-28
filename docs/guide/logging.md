@@ -54,7 +54,7 @@ Records a decorated function's arguments, duration and return value under
 generated keys. Handy for quick instrumentation, noisy for a real experiment:
 
 ```python
-@sp.track
+@sp.autolog
 def simulate(alpha, beta):
     return alpha * beta
 ```
@@ -124,7 +124,7 @@ sp.add_tag("gpu", "overnight")          # several at once
 sp.add_note("Re-ran after fixing the boundary condition")
 ```
 
-`log_metadata` is an alias of `add_metadata`.
+`add_metadata` is an alias of `add_metadata`.
 
 Some metadata is recorded for you on every run: hostname, working directory,
 the source of your main script, the imported modules, the runtime, and the

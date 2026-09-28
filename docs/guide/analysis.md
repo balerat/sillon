@@ -21,7 +21,7 @@ enough), so you do not have to remember paths. See [Projects](projects.md).
 ## Looking around
 
 ```python
-project.show()                  # the overview table, same as `sillon context`
+project.show()                  # the overview table, same as `sillon list`
 project.runs()                  # a RunCollection of every run
 project.runs().list()           # just the names
 run = project.get("my_fit")     # one run, by name, uuid, or uuid prefix
@@ -122,7 +122,7 @@ Files:
 ```python
 run.load_artifact("mesh")            # path inside the store
 run.load_figure("fit")
-run.fetch_result("coef", dest="out/") # copy it out to your own directory
+run.fetch("coef", dest="out/") # copy it out to your own directory
 ```
 
 Asking for something a run does not have raises `LookupError` naming the run —
@@ -234,6 +234,24 @@ across["constant"]        # {"seed": 7, "solver": "lstsq"}
 across["logic_versions"]  # more than one means they are not all comparable
 ```
 
+## Code versions and pruning from a notebook
+
+```python
+for group in project.versions():
+    print(group["logic_version"][:8], group["run_count"], group["last_seen"])
+
+current = project.versions()[0]["logic_version"]
+clean = project.query(fields={"logic_version": current})
+```
+
+```python
+project.prune(before="90d")                      # free the data, keep the record
+project.prune(run_names=["old_run"], keep_metadata=False)   # remove it entirely
+```
+
+Both mirror `sillon versions` and `sillon prune` — see
+[Code versions](code-versions.md).
+
 ## Housekeeping
 
 ```python
@@ -241,5 +259,5 @@ project.rename(run, "better_name")
 project.delete_run(run)              # removes the row and its stored data
 project.diff("run_a", "run_b")       # what differs between two runs
 project.diff_across(has_tag="sweep") # what varies across a set
-project.find_by_hash("out/fig.png")  # which run produced this file
+project.trace("out/fig.png")  # which run produced this file
 ```

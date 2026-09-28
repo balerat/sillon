@@ -6,24 +6,31 @@ sillon --help
 sillon --version
 ```
 
-Run `sillon` with no command for the project overview.
+Run `sillon` with no command for the project at a glance — its name, run count
+and health, code versions, storage and whether the daemon is up. Outside a
+project it tells you how to find your projects instead of erroring.
 
 Every command except `projects` must be run from inside a project (a directory
 containing `.sillon/`). Runs can be named by **name, full uuid, or an unambiguous
 uuid prefix** — `sillon show a3f9` works.
 
+!!! warning "Renamed in 2.0"
+    `context` → `list`, `search` → `query`, `grab` → `fetch`, `whose` → `trace`,
+    and `compare` is gone in favour of `diff`. There are no aliases; see
+    [Migrating to 2.0](../guide/migrating-to-2.0.md).
+
 ---
 
 ## Exploring
 
-### `sillon context` — project overview
+### `sillon list` — the runs, as a table
 
 ```bash
-sillon context              # every run
-sillon context my_fit       # detail cards for named runs
+sillon list              # every run
+sillon list my_fit a3f9  # just these
 ```
 
-The default when you type bare `sillon`.
+Many runs at a glance. For one run in detail, that is `sillon show`.
 
 ### `sillon show` — one run in detail
 
@@ -46,13 +53,13 @@ sillon show my_fit -A                 # analyses, with their provenance
 | `-A` | analyses and what they were computed from |
 | `-n` | notes |
 
-### `sillon search` — find runs
+### `sillon query` — find runs
 
 ```bash
-sillon search -p degree=3
-sillon search -p degree=3 lr=0.01 -t baseline
-sillon search --status SUCCESS --after 2026-01-01
-sillon search -r coef                      # runs that have this result
+sillon query -p degree=3
+sillon query -p degree=3 lr=0.01 -t baseline
+sillon query --status SUCCESS --after 2026-01-01
+sillon query -r coef                      # runs that have this result
 ```
 
 | Flag | Filter |
@@ -155,14 +162,6 @@ not all comparable.
 | `--source` | Also print the unified source diff. |
 | `--max-bytes N` | Largest result to load for comparison (default 64 MB). Bigger ones are compared by shape and dtype and reported as not compared. |
 
-### `sillon compare` — superseded by `diff`
-
-```bash
-sillon compare baseline refined
-```
-
-Kept for compatibility and now a thin adapter over `diff`. Use `sillon diff`.
-
 ### `sillon like` — runs similar to a given one
 
 ```bash
@@ -185,22 +184,22 @@ two runs share, with a tiebreak on how far the differing values moved, so
 More useful than an exact-duplicate check, which only fires on a perfect repeat
 and says nothing about the near misses.
 
-### `sillon whose` — which run produced this file
+### `sillon trace` — which run produced this file
 
 ```bash
-sillon whose figures/fit.png
-sillon whose 9f2c8a1e...            # or a bare SHA-256
+sillon trace figures/fit.png
+sillon trace 9f2c8a1e...            # or a bare SHA-256
 ```
 
 ---
 
 ## Getting data out
 
-### `sillon grab` — one item as a file
+### `sillon fetch` — one item as a file
 
 ```bash
-sillon grab my_fit -r coef
-sillon grab my_fit -r coef --dest out/
+sillon fetch my_fit -r coef
+sillon fetch my_fit -r coef --dest out/
 ```
 
 ### `sillon report` — a self-contained bundle

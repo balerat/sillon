@@ -123,10 +123,10 @@ def test_load_project_and_list_runs(project_dir):
     assert project.runs().list() == ["run_a", "run_b"]
 
 
-def test_project_context_overview(project_dir):
-    context = sl.load_project(project_dir).context()
-    assert context["mode"] == "overview"
-    assert len(context["runs"]) == 2
+def test_project_runs_lists_every_run(project_dir):
+    runs = sl.load_project(project_dir).runs()
+    assert len(runs) == 2
+    assert set(runs.list()) == {"run_a", "run_b"}
 
 
 def test_project_getitem(project_dir):
@@ -140,12 +140,9 @@ def test_project_get_missing_run(project_dir):
         sl.load_project(project_dir).get("does_not_exist")
 
 
-def test_project_details(project_dir):
-    details = sl.load_project(project_dir).details(
-        run_names="run_a", parameters=True
-    )
-    keys = {row.key for row in details["parameter"]}
-    assert keys == {"learning_rate", "optimizer", "big_param"}
+def test_run_parameters_are_readable(project_dir):
+    run = sl.load_project(project_dir).get("run_a")
+    assert set(run.parameters) == {"learning_rate", "optimizer", "big_param"}
 
 
 def test_project_add_note_and_tag(project_dir):
@@ -247,25 +244,25 @@ def test_collection_filter(project_dir):
 # ==========================================
 
 
-def test_fetch_result_glob_to_npy(project_dir, tmp_path):
+def test_fetch_glob_to_npy(project_dir, tmp_path):
     run = sl.load_project(project_dir).get("run_a")
     dest = tmp_path / "fetched"
-    target = run.fetch_result("coef", dest)
+    target = run.fetch("coef", dest)
     assert target == dest / "coef.npy"
     assert np.allclose(np.load(target), [1.323, 323.0])
 
 
-def test_fetch_result_artifact_copy(project_dir, tmp_path):
+def test_fetch_artifact_copy(project_dir, tmp_path):
     run = sl.load_project(project_dir).get("run_a")
     dest = tmp_path / "fetched"
-    target = run.fetch_result("mesh", dest)
+    target = run.fetch("mesh", dest)
     assert target == dest / "mesh.txt"
     assert target.read_text() == "artifact content"
 
 
-def test_fetch_result_figure_copy(project_dir, tmp_path):
+def test_fetch_figure_copy(project_dir, tmp_path):
     run = sl.load_project(project_dir).get("run_a")
-    target = run.fetch_result("fit", tmp_path / "figs")
+    target = run.fetch("fit", tmp_path / "figs")
     assert target.name == "fit.png"
     assert target.exists()
 
@@ -359,7 +356,7 @@ def test_run_delete(project_dir):
 def test_sl_delete_run(project_dir):
     project = sl.load_project(project_dir)
     run = project.get("run_b")
-    assert sl.delete_run(run)["status"] == "success"
+    assert run.delete()["status"] == "success"
     assert project.runs().list() == ["run_a"]
 
 
@@ -373,11 +370,6 @@ def test_project_delete_run_by_name(project_dir):
 def test_delete_missing_run(project_dir):
     project = sl.load_project(project_dir)
     assert project.delete_run("ghost")["status"] == "error"
-
-
-def test_sl_delete_run_rejects_non_run(project_dir):
-    with pytest.raises(TypeError):
-        sl.delete_run("run_a")
 
 
 def test_run_add_metadata_requires_value(project_dir):
@@ -804,20 +796,20 @@ def test_rename_missing_run(project_dir):
 # ==========================================
 
 
-def test_find_by_hash_figure_and_artifact(project_dir):
+def test_trace_figure_and_artifact(project_dir):
     project = sl.load_project(project_dir)
     # The fixture's figure 'fit' has hsh 'fig456'; artifact 'mesh' has 'abc123'.
-    fig_matches = project.find_by_hash("fig456")
+    fig_matches = project.trace("fig456")
     assert fig_matches == [
         {"run_name": "run_a", "run_uuid": RUN_A_UUID, "kind": "figure", "name": "fit"}
     ]
-    art_matches = project.find_by_hash("abc123")
+    art_matches = project.trace("abc123")
     assert art_matches[0]["kind"] == "artifact"
     assert art_matches[0]["name"] == "mesh"
-    assert project.find_by_hash("nope") == []
+    assert project.trace("nope") == []
 
 
-def test_find_by_hash_from_file(project_dir, tmp_path):
+def test_trace_from_file(project_dir, tmp_path):
     # Hashing a real file: write content, compute its hash, store an artifact with it.
     from sqlmodel import select
     from silloncore.glob import get_hash
@@ -832,7 +824,7 @@ def test_find_by_hash_from_file(project_dir, tmp_path):
         ).first()
         session.add(ArtifactTable(name="blob", hsh=h, path="p", run_id=run.id))
         session.commit()
-    matches = sl.load_project(project_dir).find_by_hash(str(f))
+    matches = sl.load_project(project_dir).trace(str(f))
     assert matches[0]["run_name"] == "run_b" and matches[0]["name"] == "blob"
 
 
@@ -875,11 +867,29 @@ def test_query_metadata_short_key(project_dir):
     assert project.query(has_metadata="dataset").list() == ["run_a"]
 
 
-def test_sillonpy_log_metadata_is_alias():
+def test_public_surface_is_the_2_0_one():
+    """The renames are hard: old spellings must be gone, not aliased."""
     import sillonpy as sp
 
-    assert sp.log_metadata is sp.add_metadata
-    assert hasattr(sp, "track_run")
+    assert set(sp.__all__) == {
+        "init", "autolog", "track_run", "force_dump",
+        "log_param", "log_result", "log_figure",
+        "add_metadata", "add_note", "add_tag",
+    }
+    for gone in ("log_metadata", "track"):
+        assert not hasattr(sp, gone), f"{gone} should have been removed in 2.0"
+
+    assert set(sl.__all__) == {
+        "Project", "load_project", "open_project", "list_projects",
+        "Run", "RunCollection", "forget_reads", "pending_reads",
+    }
+    assert not hasattr(sl, "delete_run")
+
+    for gone in ("compare", "context", "details", "find_by_hash"):
+        assert not hasattr(sl.Project, gone), f"Project.{gone} should be gone in 2.0"
+    assert not hasattr(sl.Run, "fetch_result")
+    for added in ("trace", "versions", "prune", "diff", "query"):
+        assert hasattr(sl.Project, added)
 
 
 # ==========================================

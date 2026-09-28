@@ -181,16 +181,16 @@ class Glob:
             waiting to be committed to disk.
     """
 
-    def __init__(self, simply_path: Path):
+    def __init__(self, storage_path: Path):
         """Initializes the Glob handler and opens the HDF5 file.
 
         Args:
-            simply_path (Path): The directory path where the glob file should be created.
+            storage_path (Path): The directory the glob file lives in.
         """
-        self.path = simply_path
-        self.file = h5py.File(str(simply_path / "glob.hdf5"), "a", libver='latest')
+        self.path = storage_path
+        self.file = h5py.File(str(storage_path / "glob.hdf5"), "a", libver='latest')
         self.file.swmr_mode = True # Requires libver="latest" to be able to read the file while the server is running
-        print(f"\n[SERVER] Creating/Writing to HDF5 at: {Path(str(simply_path / 'glob.hdf5')).resolve()}", flush=True)
+        print(f"\n[SERVER] Creating/Writing to HDF5 at: {Path(str(storage_path / 'glob.hdf5')).resolve()}", flush=True)
         self.results = []
         self.parameters = []
 

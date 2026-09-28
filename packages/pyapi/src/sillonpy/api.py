@@ -1,7 +1,7 @@
 """
 The API exposes the main tracking functions to the user. 
 
-These functions are loaded through the `simplypy` import. The user should not have 
+These functions are what `import sillonpy` gives you. The user should not have 
 access to the underlying data logging and server transmission logic. To achieve 
 this, a unique `Tracker` object for each simulation run is maintained using a 
 `ContextVar`. This shared context allows the API functions to access the tracker 
@@ -23,7 +23,7 @@ from .tracker import Tracker
 #     Context      #
 ####################
 
-# This file will be imported with simply so the context is created here.
+# Imported with sillonpy, so the run context exists from the first call.
 _context = ContextVar("simulation_tracker_context", default=None)
 
 
@@ -158,7 +158,7 @@ def _link_parent(source: Any):
     )
 
 
-def track(
+def autolog(
     func=None,
     *,
     save_result: bool = False,
@@ -189,7 +189,7 @@ def track(
     """
     if func is None:
         def decorator(f):
-            return track(
+            return autolog(
                 f,
                 save_result=save_result,
                 run_name=run_name,
@@ -530,9 +530,6 @@ def force_dump():
     set_context(None)
 
 
-# `log_metadata` is an alias of `add_metadata`, so the data-logging verbs read
-# uniformly (`log_param` / `log_result` / `log_figure` / `log_metadata`).
-log_metadata = add_metadata
 
 
 @contextmanager
