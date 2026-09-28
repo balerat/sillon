@@ -129,12 +129,17 @@ a file on disk came from.
 
 ## Lineage
 
-A run can record that it derives from another:
+A run can derive from another, and usually you do not have to say so: if your
+script loads an earlier run's data through sillonlab before logging a new one,
+sillon records the link itself, naming the items that passed between them.
 
 ```python
-with sp.track_run(inherit="baseline"):
+state = sl.load_project().get("equilibrated").load_result("final_state")
+
+with sp.track_run():          # parent edge recorded automatically
     ...
 ```
 
-Nothing is copied — it is an edge you can query later with `run.parents()`,
-`run.children()`, or `sillon lineage <run>`.
+Declare it with `inherit=` when the two halves happen in different processes.
+Either way nothing is copied — it is an edge you can query later with
+`run.parents()`, `run.children()`, or `sillon lineage <run>`.

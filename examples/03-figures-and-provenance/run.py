@@ -37,14 +37,18 @@ with sp.track_run(run_name="baseline", project_name="provenance", author="you"):
                   caption="Linear fit over the noisy sample")
     plt.close(fig)
 
-# --- a run that derives from it -------------------------------------------
-# `inherit` records a lineage edge only; nothing is copied. The child logs its
-# own parameters, and you can walk back to the parent later.
-with sp.track_run(run_name="refined", project_name="provenance",
-                  author="you", inherit="baseline"):
+# --- a run that derives from it, without saying so ------------------------
+# Loading the earlier run's data is enough: sillon watched it happen and records
+# the parent edge itself, naming the item that passed between them. No inherit=.
+import sillonlab as sl
+
+baseline_coef = sl.load_project(".").get("baseline").load_result("coef")
+
+with sp.track_run(run_name="refined", project_name="provenance", author="you"):
     sp.log_param("degree", 3)
+    sp.log_param("seeded_from", baseline_coef.tolist())
     coef3 = np.polyfit(x, y, 3)
     sp.log_result("coef", coef3)
-    sp.add_note("Higher degree, same data as baseline")
+    sp.add_note("Higher degree, seeded from the baseline fit")
 
 print("Logged. Now try:  sillon show baseline -f   and   sillon lineage refined")

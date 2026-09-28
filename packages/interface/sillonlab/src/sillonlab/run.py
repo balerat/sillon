@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, List, Optional
 
+from silloncommon.access_log import record_read
 from silloncore.engine import (
     get_run_snapshot,
     match_run,
@@ -170,6 +171,25 @@ class Run:
     # Loading functions
     # ---------------------------------------------------------
 
+    def _note_read(self, item: str = None) -> None:
+        """Record that this process pulled this run's data.
+
+        A run logged afterwards in the same process picks this up and records a
+        parent edge, so deriving from an earlier run needs no `inherit=`. See
+        `silloncommon.access_log`.
+
+        Only *data* loads call this. Browsing a project — listing runs, reading
+        `.parameters`, building a dataframe — records nothing, because looking
+        at a run is not deriving from it.
+        """
+        try:
+            self._load_snapshot()  # populates self.uuid
+            record_read(self.uuid, self.name, item)
+        except Exception:
+            # Provenance is a bonus; it must never break a load.
+            pass
+
+
     def _load_parameter(self, name: str) -> Any:
         # Heavy array parameters are read back from the glob; light ones come
         # straight from the database (engine handles both transparently).
@@ -200,6 +220,8 @@ class Run:
         Returns:
             Any: The value if one name is given, otherwise a list of values.
         """
+        for name in names:
+            self._note_read(name)
         return self._load_many(self._load_parameter, names, "parameter")
 
     def load_result(self, *names: str) -> Any:
@@ -216,6 +238,8 @@ class Run:
             Any: The value if one name is given, otherwise a list of values.
         """
         snapshot = self._load_snapshot()
+        for name in names:
+            self._note_read(name)
         return self._load_many(
             lambda name: load_run_result(self.storage_root, snapshot, name),
             names,
@@ -246,6 +270,7 @@ class Run:
             Path: The path to the artifact file, or to its folder if the
                 artifact holds several files.
         """
+        self._note_read(name)
         return load_run_artifact(self.storage_root, self._load_snapshot(), name)
 
     def load_source(self) -> Optional[str]:
@@ -262,6 +287,7 @@ class Run:
             Path: The path to the figure file (e.g., to open or display in
                 a notebook with `IPython.display.Image`).
         """
+        self._note_read(name)
         return load_run_figure(self.storage_root, self._load_snapshot(), name)
 
     def fetch_result(self, name: str, dest=None) -> Path:
@@ -400,6 +426,7 @@ class Run:
         Returns:
             Any: The stored analysis data.
         """
+        self._note_read(name)
         return load_run_analysis(self.storage_root, self._load_snapshot(), name)
 
     # ---------------------------------------------------------

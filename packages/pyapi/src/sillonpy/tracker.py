@@ -13,6 +13,7 @@ from .metadata import (
 )
 from silloncommon.codeversion import compute_version
 from silloncommon.source_store import store_sources
+from silloncommon import access_log
 from silloncommon.commands import (
     LogResultCmd,
     LogFigureCmd,
@@ -180,7 +181,35 @@ class Tracker:
             self.add_metadata("sillon.status", self.status)
 
         self.add_metadata("sillon.python.callstack", self.callstack)
+        self.record_read_lineage()
         self.server.dump_run()  # When the simulation ends we ask the server to dump the simulation into the database
+
+    def record_read_lineage(self):
+        """Record a parent edge for every run whose data this process read.
+
+        The point of the whole feature: if the script loaded an earlier run
+        through sillonlab before producing this one, that is a derivation, and
+        sillon already saw it happen. No `inherit=` to remember.
+
+        Drained at seal time rather than at init, so reads that happened
+        *before* the run was opened — the usual order, since you load the
+        previous result and then start computing — are still captured.
+
+        Never fatal: provenance must not cost you a run.
+        """
+        try:
+            for parent in access_log.drain(exclude_uuid=str(self.uuid)):
+                self.add_metadata(
+                    "sillon.parent",
+                    {
+                        "uuid": parent["uuid"],
+                        "name": parent["name"],
+                        "relation": "read",
+                        "items": parent["items"],
+                    },
+                )
+        except Exception:
+            pass
 
     """
     Here are all the method exposed to the API. They are not redoundant. The goal of the api is to use the contextVar object to call form 

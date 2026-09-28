@@ -141,6 +141,17 @@ when you want it.
 
 Needs pandas: `pip install "sillon[analysis]"`.
 
+## Provenance while you explore
+
+Loading a run's data records it, so that a run you log later in the same process
+is linked to it automatically — see [Provenance](provenance.md). Browsing is not
+recorded; only actual data loads are.
+
+```python
+sl.pending_reads()    # runs whose data this session has read
+sl.forget_reads()     # forget them, so they do not attach to your next run
+```
+
 ## Annotating after the fact
 
 ```python

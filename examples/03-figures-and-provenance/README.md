@@ -18,8 +18,16 @@ fit  ← built from: coef, degree
 That answers the question you will actually have later — *which data made this
 plot?* — without you having to remember.
 
-**Lineage.** `inherit="baseline"` records that one run derives from another.
-Nothing is copied; it is a queryable edge:
+**Lineage, without declaring it.** The second run loads the first one's `coef`
+through sillonlab before logging. That is a derivation, and sillon saw it — so
+the parent edge is recorded with no `inherit=` anywhere. The edge even names the
+item that passed between them.
+
+Browsing does not count: listing runs or reading `.parameters` records nothing.
+Use `sl.forget_reads()` to clear the slate in a long session, and `inherit=`
+when the two halves happen in different processes.
+
+It is a queryable edge either way:
 
 ```python
 import sillonlab as sl

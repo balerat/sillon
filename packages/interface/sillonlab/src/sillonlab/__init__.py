@@ -18,6 +18,7 @@ Example:
 
 from sillonlab.project import Project, load_project
 from sillonlab.projects import list_projects, open_project
+from silloncommon.access_log import clear as _clear_reads, reads as _reads
 from sillonlab.run import Run, RunCollection
 
 
@@ -41,6 +42,37 @@ def delete_run(run: Run) -> dict:
     return run.delete()
 
 
+def forget_reads() -> None:
+    """Forget which runs' data this session has read.
+
+    A run logged in this process records a parent edge for every run whose data
+    it loaded, so you never have to write `inherit=`. In a long exploratory
+    session that can attach browsing you did an hour ago to the run you log
+    now — call this to start the provenance clean.
+
+    Example:
+        ```python
+        for run in project.runs():
+            inspect(run.load_result("field"))   # exploring, not deriving
+
+        sl.forget_reads()
+
+        with sp.track_run():                    # no parents from the loop above
+            ...
+        ```
+    """
+    _clear_reads()
+
+
+def pending_reads() -> list:
+    """The runs whose data this session has read, and would record as parents.
+
+    Returns:
+        list[dict]: `{"uuid", "name", "items"}` per run read so far.
+    """
+    return _reads()
+
+
 __all__ = [
     "Project",
     "load_project",
@@ -49,4 +81,6 @@ __all__ = [
     "Run",
     "RunCollection",
     "delete_run",
+    "forget_reads",
+    "pending_reads",
 ]

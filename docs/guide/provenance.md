@@ -31,6 +31,47 @@ you can defend and one you have to reproduce from memory.
 
 ## Which run derives from which?
 
+Usually you do not have to say. If your script loads an earlier run's data
+through sillonlab and then logs a new run, sillon saw that happen and records
+the link itself:
+
+```python
+import sillonlab as sl, sillonpy as sp
+
+prev  = sl.load_project().get("equilibrated")
+state = prev.load_result("final_state")        # ← sillon notices this
+
+with sp.track_run(project_name="dynamics"):
+    sp.log_result("trajectory", evolve(state))
+    # parent edge to `equilibrated` recorded, naming `final_state`
+```
+
+No annotation, no discipline required. The edge records **which items** you read,
+so you can see not just *that* one run fed another but *what* passed between them.
+
+### What counts as deriving
+
+Only loading a run's **data** — `load_result`, `load_parameter`, `load_analysis`,
+`load_artifact`, `load_figure`. Browsing does not: listing runs, reading
+`.parameters`, calling `.show()` or `to_dataframe()` records nothing, because
+looking at a run is not deriving from it.
+
+In a long exploratory session where earlier reads should not attach themselves
+to the next run you log:
+
+```python
+sl.pending_reads()    # what would be recorded right now
+sl.forget_reads()     # start the provenance clean
+```
+
+!!! warning "Same process only"
+    The link is made by watching one process do both halves. Load data in a
+    notebook, write it to a file, then run a separate script, and there is no
+    edge — nothing observed the connection. Use `inherit=` when the two halves
+    genuinely happen in different processes.
+
+### Declaring it explicitly
+
 ```python
 with sp.track_run(run_name="refined", inherit="baseline"):
     sp.log_param("degree", 3)
@@ -39,6 +80,10 @@ with sp.track_run(run_name="refined", inherit="baseline"):
 `inherit` takes a run name, a uuid, or a `sillonlab.Run`. **Nothing is copied** —
 it records an edge. The child logs its own parameters; the link lets you walk
 back.
+
+Edges carry a `relation` so the two kinds stay distinguishable: `derived-from`
+for something you declared, `read` for something sillon inferred. Declaring a
+run you also read gives one merged edge, not two.
 
 ```bash
 sillon lineage refined

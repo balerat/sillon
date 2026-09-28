@@ -92,13 +92,39 @@ def commit_status(simulation_obj, status):
 
 
 def commit_parent(simulation_obj, parent):
-    """Records a lineage edge: a run this run inherited/derived from.
+    """Records a lineage edge: a run this run derived from.
+
+    Merges by uuid rather than appending blindly, because the same run can
+    arrive twice — once from an explicit `inherit=` and once because the
+    process actually read its data. One edge, with the items unioned.
+
+    A deliberate `derived-from` outranks an inferred `read`: if you said the run
+    derives from this parent, that is the stronger claim.
 
     Args:
         simulation_obj (Simulation): The active simulation instance.
-        parent (dict): `{"uuid", "name", "params": [inherited param names]}`.
+        parent (dict): `{"uuid", "name", "relation", "items"}`.
     """
-    simulation_obj.parents.append(parent)
+    if not isinstance(parent, dict) or not parent.get("uuid"):
+        return
+
+    for existing in simulation_obj.parents:
+        if existing.get("uuid") == parent["uuid"]:
+            items = set(existing.get("items") or []) | set(parent.get("items") or [])
+            existing["items"] = sorted(items)
+            if parent.get("relation") == "derived-from":
+                existing["relation"] = "derived-from"
+            existing.setdefault("relation", parent.get("relation", "read"))
+            return
+
+    simulation_obj.parents.append(
+        {
+            "uuid": parent["uuid"],
+            "name": parent.get("name"),
+            "relation": parent.get("relation", "read"),
+            "items": sorted(parent.get("items") or []),
+        }
+    )
 
 
 def commit_code_version(simulation_obj, version):

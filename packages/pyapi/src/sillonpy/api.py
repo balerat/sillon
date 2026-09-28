@@ -144,8 +144,17 @@ def _link_parent(source: Any):
     if snapshot is None:
         raise ValueError(f"inherit: run '{identifier}' not found in the project.")
 
+    # relation distinguishes a deliberate inherit= from an edge sillon inferred
+    # by watching what the process actually read, so each can be trusted or
+    # ignored on its own terms.
     ctx.add_metadata(
-        "sillon.parent", {"uuid": snapshot["uuid"], "name": snapshot["name"]}
+        "sillon.parent",
+        {
+            "uuid": snapshot["uuid"],
+            "name": snapshot["name"],
+            "relation": "derived-from",
+            "items": [],
+        },
     )
 
 
