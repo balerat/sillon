@@ -13,15 +13,17 @@ sillon projects
 ```
 
 ```text
-╭─ Projects ──────────────────────────────────────────────────────╮
-│  3 projects registered on this machine                          │
-│                                                                 │
-│    Project              Runs   Last activity   Location         │
-│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
-│    Shaking Lattice      135    9d ago          /Users/you/phd…  │
-│    Thermal Sweep         41    48d ago         /Users/you/work… │
-│    (unnamed)              2    92d ago         /Users/you/demo  │
-╰─────────────────────────────────────────────────────────────────╯
+╭─ Projects ─────────────────────────────────────────────────────────────────────╮
+│                                                                                │
+│  3 projects registered on this machine                                         │
+│                                                                                │
+│     Project             Runs     Last activity     Location                    │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
+│     Shaking Lattice     135      9d ago            /Users/you/phd/shaking      │
+│     Thermal Sweep        41      48d ago           /Users/you/work/thermal     │
+│     (unnamed)            2       92d ago           /Users/you/demo             │
+│                                                                                │
+╰────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 Unlike every other command, this one works from **any** directory — it answers

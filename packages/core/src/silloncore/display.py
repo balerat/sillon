@@ -21,6 +21,7 @@ from rich.box import SIMPLE, SIMPLE_HEAVY
 from rich.columns import Columns
 from rich.console import Console, Group
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
@@ -150,6 +151,13 @@ def relative_time(date_str: str) -> str:
 
 
 # --- builders ---------------------------------------------------------------
+# Panels and tables size themselves to their content, so on a wide terminal
+# they stop where the data stops instead of stretching a handful of columns
+# across the whole screen. This caps the one element that has no content of its
+# own to measure.
+MAX_RULE_WIDTH = 100
+
+
 def themed_table(**kwargs) -> Table:
     """A pre-themed rich Table (foam header, wake border, zebra rows).
 
@@ -161,15 +169,24 @@ def themed_table(**kwargs) -> Table:
         box=SIMPLE_HEAVY,
         border_style=S_BORDER,
         row_styles=S_ZEBRA,
-        expand=True,
+        expand=False,
     )
     options.update(kwargs)
     return Table(**options)
 
 
+def _rule(markup: str) -> None:
+    """A section rule, capped so it stays a separator rather than a stripe.
+
+    Everything else here sizes itself to its content, so a rule drawn across a
+    200-column terminal would be the one element shouting.
+    """
+    console.print(Rule(markup), width=min(console.width, MAX_RULE_WIDTH))
+
+
 def themed_panel(content, title: str = None, **kwargs) -> Panel:
     """A pre-themed rich Panel (wake border, hull fill, left-aligned title)."""
-    options = dict(border_style=S_BORDER, style=S_PANEL_BG, padding=(1, 2))
+    options = dict(border_style=S_BORDER, style=S_PANEL_BG, padding=(1, 2), expand=False)
     options.update(kwargs)
     title_markup = f"[bold {c('spray')}]{title}[/]" if title else None
     return Panel(content, title=title_markup, title_align="left", **options)
@@ -263,7 +280,7 @@ def render_run_card(report: dict):
     for note in report["notes"]:
         lines.append(Text(f"• {note}", style=f"italic {c('slate')}"))
 
-    return themed_panel(Group(*lines), title=report["name"], expand=False)
+    return themed_panel(Group(*lines), title=report["name"])
 
 
 def print_context(data: dict, project_name: str = "") -> None:
@@ -294,7 +311,8 @@ def _print_overview(runs: list, project_name: str) -> None:
         )
 
     subtitle = Text(
-        f"{len(runs)} runs logged in the project", style=f"italic {c('ember')}"
+        f"{len(runs)} run{'s' if len(runs) != 1 else ''} logged in the project",
+        style=f"italic {c('ember')}",
     )
     console.print(
         themed_panel(Group(subtitle, Text(""), table), title=project_name or "Project")
@@ -318,7 +336,7 @@ def _print_specific(runs: list) -> None:
             Text.assemble(("Language  ", S_LABEL), (str(run.get("language", "N/A")), S_VALUE)),
             Text.assemble(("Status    ", S_LABEL), status_text(run.get("status"))),
         )
-        cards.append(themed_panel(content, title=run["name"], expand=False))
+        cards.append(themed_panel(content, title=run["name"]))
     console.print(Columns(cards, equal=True, expand=False))
 
 
@@ -481,7 +499,7 @@ def _describe_value(summary: dict) -> str:
 def print_diff(result: dict) -> None:
     """Prints a `silloncore.engine.diff` payload."""
     a, b = result["runs"]
-    console.rule(f"[bold {c('foam')}]{a['name']}  →  {b['name']}[/]")
+    _rule(f"[bold {c('foam')}]{a['name']}  →  {b['name']}[/]")
 
     # --- parameters -------------------------------------------------------
     params = result["parameters"]
@@ -594,7 +612,7 @@ def print_source_diff(source_diff: str) -> None:
     if not source_diff.strip():
         console.print(f"[{c('slate')}]No source differences to show.[/]")
         return
-    console.rule(f"[bold {c('wake')}]Source[/]")
+    _rule(f"[bold {c('wake')}]Source[/]")
     console.print(Syntax(source_diff, "diff", theme="monokai", line_numbers=False))
 
 

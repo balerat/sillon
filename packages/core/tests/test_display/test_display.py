@@ -51,7 +51,7 @@ def _summary(**over):
         "name": "Shaking Lattice",
         "path": "/Users/doph/Code/phd/projects/shaking",
         "run_count": 135,
-        "last_activity": "2026-09-01 10:00:00",
+        "last_activity": "2026-09-01-10:00:00",
         "status_counts": {"SUCCESS": 132, "CRASHED": 3},
         "versions": 2,
         "current_version": "c8d01234deadbeef",
@@ -131,7 +131,7 @@ def _run(**over):
     base = {
         "uuid": "a3f9c8d0-0000-0000-0000-000000000000",
         "name": "my_fit",
-        "timestamp": "2026-09-01 10:00:00",
+        "timestamp": "2026-09-01-10:00:00",
         "param_count": 4,
         "asset_count": 2,
         "status": "SUCCESS",
@@ -164,7 +164,7 @@ def test_print_projects(quiet_console):
                 "project_name": "Shaking Lattice",
                 "project_path": "/Users/doph/Code/phd/projects/shaking",
                 "run_count": 135,
-                "last_activity": "2026-09-01 10:00:00",
+                "last_activity": "2026-09-01-10:00:00",
                 "exists": True,
             },
             {
@@ -192,8 +192,8 @@ def test_print_code_versions(quiet_console):
                 "logic_version": "c8d01234deadbeef",
                 "run_count": 12,
                 "constant_variants": 3,
-                "first_seen": "2026-08-01 10:00:00",
-                "last_seen": "2026-09-01 10:00:00",
+                "first_seen": "2026-08-01-10:00:00",
+                "last_seen": "2026-09-01-10:00:00",
                 "partial": False,
             },
             {
@@ -480,7 +480,7 @@ def test_everything_renders_on_a_cramped_terminal(narrow_console):
     display.print_context({"mode": "specific", "runs": [_run()]})
     display.print_projects(
         [{"project_name": "P", "project_path": "/a/very/long/path/to/a/project",
-          "run_count": 1, "last_activity": "2026-09-01 10:00:00", "exists": True}]
+          "run_count": 1, "last_activity": "2026-09-01-10:00:00", "exists": True}]
     )
     display.print_code_versions(
         [{"logic_version": "c8d01234deadbeef", "run_count": 1, "constant_variants": 1,
@@ -497,3 +497,48 @@ def test_everything_renders_on_a_cramped_terminal(narrow_console):
                                   "only_in_other": [], "missing_here": []}]}
     )
     assert narrow_console.getvalue()
+
+
+# ==========================================
+#            WIDTH ON A WIDE TERMINAL
+# ==========================================
+def _widest(buffer):
+    return max((len(line) for line in buffer.getvalue().splitlines()), default=0)
+
+
+@pytest.fixture
+def wide_console(monkeypatch):
+    """A 200-column terminal, where stretching to fit looks absurd."""
+    buffer = io.StringIO()
+    monkeypatch.setattr(display, "console", Console(file=buffer, width=200))
+    return buffer
+
+
+def test_panels_size_to_their_content_not_to_the_terminal(wide_console):
+    """A handful of short columns should not be spread across 200 columns."""
+    display.print_landing(_summary(), "2.0.1")
+    assert _widest(wide_console) < 100
+
+
+def test_tables_size_to_their_content_not_to_the_terminal(wide_console):
+    display.print_code_versions(
+        [{"logic_version": "c8d01234deadbeef", "run_count": 1, "constant_variants": 1,
+          "first_seen": None, "last_seen": None, "partial": False}]
+    )
+    assert _widest(wide_console) < 120
+
+
+def test_a_section_rule_stays_a_separator(wide_console):
+    """The one element with no content to measure, so it is capped instead."""
+    display.print_diff(_diff())
+    assert _widest(wide_console) <= display.MAX_RULE_WIDTH
+
+
+def test_wide_content_still_gets_the_room_it_needs(wide_console):
+    """Content-sizing cuts both ways: a long path must not be folded away."""
+    path = "/Users/doph/Code/phd/projects/a-rather-deeply-nested/shaking-lattice"
+    display.print_projects(
+        [{"project_name": "Shaking Lattice", "project_path": path,
+          "run_count": 135, "last_activity": "2026-09-01-10:00:00", "exists": True}]
+    )
+    assert path in wide_console.getvalue()

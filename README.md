@@ -51,14 +51,16 @@ sillon projects           # every project on this machine, and where it is
 ```
 
 ```text
-╭─ Project ──────────────────────────────────────────────────────╮
-│  10 runs logged in the project                                 │
-│                                                                │
-│    ID          Run Name        When       Params  Assets  Status   │
-│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
-│    39629020    trusting_cannon just now     2       2    SUCCESS   │
-│    7e7e5330    happy_perlman   just now     2       2    CRASHED   │
-╰────────────────────────────────────────────────────────────────╯
+╭─ Shaking Lattice ─────────────────────────────────────────────────────────────────────╮
+│                                                                                       │
+│  2 runs logged in the project                                                         │
+│                                                                                       │
+│     ID           Run Name            When         Params     Assets      Status       │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
+│     39629020     trusting_cannon     just now       2          2         SUCCESS      │
+│     7e7e5330     happy_perlman       just now       2          2         CRASHED      │
+│                                                                                       │
+╰───────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## Query it

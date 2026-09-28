@@ -130,5 +130,5 @@ version. Runs logged from now on cover everything.
 
 - [Provenance and lineage](provenance.md) — how runs, figures and analyses
   record where their data came from.
-- [`sillon versions`](../reference/cli.md#sillon-versions--group-runs-by-the-code-that-produced-them)
-  and [`sillon diff`](../reference/cli.md#sillon-diff--what-differs-between-runs).
+- [`sillon versions`](../reference/cli.md#sillon-versions-group-runs-by-the-code-that-produced-them)
+  and [`sillon diff`](../reference/cli.md#sillon-diff-what-differs-between-runs).
