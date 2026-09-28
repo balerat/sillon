@@ -15,6 +15,7 @@ free of any rich dependency.
 """
 
 from datetime import datetime
+from pathlib import Path
 
 from rich.box import SIMPLE, SIMPLE_HEAVY
 from rich.columns import Columns
@@ -346,6 +347,15 @@ __all__ = [
     "render_run_card",
     "render_to_html",
     "print_context",
+    "print_projects",
+    "print_code_versions",
+    "print_code_version_files",
+    "print_diff",
+    "print_source_diff",
+    "print_diff_across",
+    "print_similar_runs",
+    "print_landing",
+    "print_landing_outside_project",
     "Columns",
     "Group",
     "Text",
