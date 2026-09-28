@@ -442,3 +442,179 @@ def print_code_version_files(detail: dict) -> None:
             title=f"version · {short_id(detail['logic_version'])}",
         )
     )
+
+
+def _fmt_delta(pct):
+    if pct is None:
+        return ""
+    sign = "+" if pct > 0 else ""
+    return f"({sign}{pct:.2f}%)" if abs(pct) < 1000 else f"({sign}{pct:.0f}%)"
+
+
+def _describe_value(summary: dict) -> str:
+    """One-line description of a compared value."""
+    if not summary:
+        return "—"
+    if summary.get("kind") == "scalar":
+        return format_value(summary.get("value"))
+    if summary.get("kind") == "array":
+        shape = summary.get("shape")
+        return f"{summary.get('dtype')} {tuple(shape) if shape else ''}"
+    if summary.get("kind") in ("sequence", "mapping"):
+        return f"{summary['kind']} ({summary.get('length')})"
+    return "—"
+
+
+def print_diff(result: dict) -> None:
+    """Prints a `silloncore.engine.diff` payload."""
+    a, b = result["runs"]
+    console.rule(f"[bold {c('foam')}]{a['name']}  →  {b['name']}[/]")
+
+    # --- parameters -------------------------------------------------------
+    params = result["parameters"]
+    if params["changed"] or params["added"] or params["removed"]:
+        table = themed_table(padding=(0, 2))
+        table.add_column("Parameter", style=f"bold {c('spray')}")
+        table.add_column("From", style=S_DIM)
+        table.add_column("To", style=c("foam"))
+        table.add_column("Δ", style=c("ember"))
+
+        for key, change in result["parameters"]["changed"].items():
+            table.add_row(
+                key,
+                format_value(change["old"]),
+                format_value(change["new"]),
+                _fmt_delta(change["delta_pct"]),
+            )
+        for key in params["added"]:
+            table.add_row(key, "—", "[#6FCF8E]added[/]", "")
+        for key in params["removed"]:
+            table.add_row(key, "[#E06C75]removed[/]", "—", "")
+
+        subtitle = Text(
+            f"{params['unchanged']} unchanged", style=f"italic {c('slate')}"
+        )
+        console.print(themed_panel(Group(table, Text(""), subtitle), title="Parameters"))
+    else:
+        console.print(f"[{c('slate')}]Parameters are identical.[/]")
+
+    # --- code -------------------------------------------------------------
+    code = result["code"]
+    if not code["known"]:
+        console.print(f"[{c('slate')}]Code version was not recorded for these runs.[/]")
+    elif code["same_logic"] and not code["constants_differ"]:
+        cosmetic = any(f["status"] == "cosmetic" for f in code["files"].values())
+        note = " (comments or formatting only)" if cosmetic else ""
+        console.print(
+            f"\n[bold {c('ember')}]Code[/]  same logic "
+            f"[{c('slate')}]{short_id(code['logic_version'][0] or '')}{note}[/]"
+        )
+    elif code["same_logic"]:
+        differing = [n for n, f in code["files"].items() if f["status"] == "constants"]
+        console.print(
+            f"\n[bold {c('ember')}]Code[/]  same logic "
+            f"[{c('slate')}]{short_id(code['logic_version'][0] or '')}[/] — "
+            f"constants differ in {', '.join(differing)}"
+        )
+    else:
+        moved = [n for n, f in code["files"].items() if f["status"] in ("changed", "added", "removed")]
+        console.print(
+            f"\n[bold #E06C75]Code[/]  logic changed — {', '.join(moved) or 'unknown files'}"
+        )
+
+    # --- results ----------------------------------------------------------
+    results = result["results"]
+    interesting = {n: r for n, r in results.items() if r["status"] != "same"}
+    if interesting:
+        table = themed_table(padding=(0, 2))
+        table.add_column("Result", style=f"bold {c('spray')}")
+        table.add_column("From", style=S_DIM)
+        table.add_column("To", style=c("foam"))
+        table.add_column("", style=c("ember"))
+
+        for name, info in interesting.items():
+            if info["status"] == "added":
+                table.add_row(name, "—", "[#6FCF8E]added[/]", "")
+            elif info["status"] == "removed":
+                table.add_row(name, "[#E06C75]removed[/]", "—", "")
+            elif info["status"] == "unknown":
+                table.add_row(
+                    name,
+                    _describe_value(info["old"]),
+                    _describe_value(info["new"]),
+                    "too large to compare",
+                )
+            else:
+                note = _fmt_delta(info["delta_pct"]) or {
+                    "shape": "shape changed",
+                    "dtype": "dtype changed",
+                    "contents": "contents differ",
+                }.get(info["reason"], "")
+                table.add_row(
+                    name,
+                    _describe_value(info["old"]),
+                    _describe_value(info["new"]),
+                    note,
+                )
+
+        same = len(results) - len(interesting)
+        subtitle = Text(f"{same} unchanged", style=f"italic {c('slate')}")
+        console.print(themed_panel(Group(table, Text(""), subtitle), title="Results"))
+    elif results:
+        console.print(f"[{c('slate')}]Results are identical.[/]")
+
+    # --- context ----------------------------------------------------------
+    context = result["context"]
+    if context["status"] or context["runtime"]:
+        lines = []
+        if context["status"]:
+            lines.append(f"  status   {context['status'][0]} → {context['status'][1]}")
+        if context["runtime"]:
+            lines.append(f"  runtime  {context['runtime'][0]} → {context['runtime'][1]}")
+        console.print(f"\n[bold {c('ember')}]Context[/]\n" + "\n".join(lines))
+
+
+def print_source_diff(source_diff: str) -> None:
+    """Prints the unified source diff of a `diff` payload."""
+    from rich.syntax import Syntax
+
+    if not source_diff.strip():
+        console.print(f"[{c('slate')}]No source differences to show.[/]")
+        return
+    console.rule(f"[bold {c('wake')}]Source[/]")
+    console.print(Syntax(source_diff, "diff", theme="monokai", line_numbers=False))
+
+
+def print_diff_across(result: dict) -> None:
+    """Prints a `silloncore.engine.diff_across_runs` payload."""
+    if not result["run_count"]:
+        console.print(f"[{c('slate')}]No runs matched.[/]")
+        return
+
+    lines = []
+    if result["varying"]:
+        for key, values in result["varying"].items():
+            shown = ", ".join(format_value(v) for v in values[:6])
+            if len(values) > 6:
+                shown += f", … ({len(values)} values)"
+            lines.append(Text.assemble(("  varying   ", S_LABEL), (f"{key}: ", c("foam")), (shown, S_DIM)))
+    else:
+        lines.append(Text("  every parameter is identical across these runs", style=S_DIM))
+
+    if result["constant"]:
+        held = ", ".join(sorted(result["constant"]))
+        lines.append(Text.assemble(("  constant  ", S_LABEL), (held, S_DIM)))
+
+    versions = result["logic_versions"]
+    if len(versions) == 1:
+        lines.append(Text.assemble(("  code      ", S_LABEL), (f"one version ({short_id(versions[0])})", S_DIM)))
+    elif len(versions) > 1:
+        lines.append(
+            Text.assemble(
+                ("  code      ", S_LABEL),
+                (f"{len(versions)} versions — these runs are not all comparable", "bold #E06C75"),
+            )
+        )
+
+    subtitle = Text(f"{result['run_count']} runs", style=f"italic {c('ember')}")
+    console.print(themed_panel(Group(subtitle, Text(""), *lines), title="Across runs"))

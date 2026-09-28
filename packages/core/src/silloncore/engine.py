@@ -22,7 +22,6 @@ from silloncommon.database import (
 )
 
 from silloncore.glob import read_glob, read_glob_many, append_glob, glob_sizes, get_hash
-from silloncore.versioncontrol import Reference, Diffref
 
 
 def get_project_context(engine, run_names: list = None) -> dict:
@@ -1349,41 +1348,40 @@ def load_run_analysis(storage_root, snapshot: dict, name: str):
     return data
 
 
-def compare(engine, run_id1, run_id2) -> dict:
-    """Compares two simulation runs and returns their differences.
+def compare(engine, run_id1, run_id2, storage_root=None) -> dict:
+    """Compares two runs. Kept for compatibility — prefer `diff`.
 
-    Instantiates two `Reference` objects from the database and utilizes the 
-    `Diffref` engine to calculate the exact changes in parameters, context, 
-    and source code between the original run and the target run.
+    Now a thin adapter over `diff`, which reaches further (code logic vs tuned
+    constants, and results compared by shape/dtype/hash) and does not depend on
+    the old `Reference` loader, whose glob read resolved against the current
+    working directory and therefore only worked from the project root.
 
     Args:
         engine (Engine): The active SQLAlchemy database engine.
-        run_id1 (str): The identifier (name or UUID) of the baseline run.
-        run_id2 (str): The identifier (name or UUID) of the target run to compare.
+        run_id1 (str): Baseline run name, uuid, or uuid prefix.
+        run_id2 (str): Target run.
+        storage_root (str | Path, optional): The project storage root. Without
+            it the source diff is skipped; parameters and context still work.
 
     Returns:
-        dict: A dictionary containing the diff mappings.
-            Format:
-            ```python
-            {
-                "status": "success",
-                "diff_param": dict,       # Parameter added/removed/changed metrics
-                "diff_status": tuple,     # Status difference (if any)
-                "diff_runtime": tuple,    # Runtime difference (if any)
-                "diff_source": str        # Unified text diff of the source code
-            }
-            ```
+        dict: `{"status", "diff_param", "diff_status", "diff_runtime",
+            "diff_source"}`, the shape this function has always returned.
     """
-    ref1 = Reference(engine=engine, run_name=run_id1)
-    ref2 = Reference(engine=engine, run_name=run_id2)
-    diff_engine = Diffref(ref1, ref2)
+    detail = diff(engine, storage_root, run_id1, run_id2)
 
     return {
         "status": "success",
-        "diff_param": diff_engine.diff_parameters,
-        "diff_status": diff_engine.diff_status,
-        "diff_runtime": diff_engine.diff_runtime,
-        "diff_source": diff_engine.diff_source,
+        "diff_param": {
+            "diff_data": {
+                key: (change["old"], change["new"], "N/A")
+                for key, change in detail["parameters"]["changed"].items()
+            },
+            "diff_key_added": set(detail["parameters"]["added"]),
+            "diff_key_removed": set(detail["parameters"]["removed"]),
+        },
+        "diff_status": detail["context"]["status"],
+        "diff_runtime": detail["context"]["runtime"],
+        "diff_source": detail["code"]["source_diff"],
     }
 
 
@@ -1550,3 +1548,78 @@ def backfill_code_versions(engine, storage_root, dry_run: bool = False) -> dict:
         "skipped": skipped,
         "versions": len({v["logic_version"] for v in updates.values()}),
     }
+
+
+# ==========================================
+#                  DIFF
+# ==========================================
+
+
+def diff(engine, storage_root, run_id1, run_id2, max_bytes=None) -> dict:
+    """Compares two runs: parameters, code, results and context.
+
+    Supersedes `compare`, which only reached parameters, status, runtime and a
+    source-text diff. This also reports whether the code differed *in logic* or
+    only in a tuned constant, and whether the results actually moved.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        storage_root (str | Path): The project storage root.
+        run_id1 (str): Baseline run name, uuid, or uuid prefix.
+        run_id2 (str): Target run.
+        max_bytes (int, optional): Largest result to load for hashing.
+
+    Raises:
+        LookupError: If either run cannot be found.
+
+    Returns:
+        dict: See `silloncore.diff.diff_runs`.
+    """
+    from silloncore.diff import diff_runs
+
+    snapshots = []
+    for identifier in (run_id1, run_id2):
+        snapshot = get_run_snapshot(engine, identifier)
+        if snapshot is None:
+            raise LookupError(f"Run '{identifier}' not found.")
+        snapshots.append(snapshot)
+
+    return diff_runs(engine, storage_root, snapshots[0], snapshots[1], max_bytes)
+
+
+def diff_across_runs(engine, run_names=None, **query) -> dict:
+    """What varies across a set of runs, and what is held fixed.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        run_names (list[str], optional): Explicit runs. Omit to use every run
+            matching the query filters.
+        **query: Cheap filters forwarded to the run index (`tags`, `fields`,
+            `parameters`, `before`, `after`, ...).
+
+    Returns:
+        dict: See `silloncore.diff.diff_across`, plus `"runs"`, the names used.
+    """
+    from silloncore.diff import diff_across
+
+    # The has_* filters take a list; accept a bare string too, the way
+    # Project.query does, so `has_tag="sweep"` behaves as people write it.
+    for key in ("has_tag", "has_parameter", "has_metadata", "has_result",
+                "has_analysis", "has_artifact"):
+        if isinstance(query.get(key), str):
+            query[key] = [query[key]]
+
+    index = select_run_index(engine)
+    # `is not None`, not truthiness: an explicitly empty list means "no runs",
+    # which is not the same as "not specified" and must not return everything.
+    if run_names is not None:
+        wanted = set(run_names)
+        entries = [e for e in index if e["name"] in wanted or e["uuid"] in wanted]
+    elif query:
+        entries = [e for e in index if match_cheap(e, **query)]
+    else:
+        entries = index
+
+    result = diff_across(entries)
+    result["runs"] = [e["name"] for e in entries]
+    return result

@@ -110,13 +110,58 @@ sillon lineage refined
 
 Shows the run's parents (`↑`) and the runs derived from it (`↓`).
 
-### `sillon compare` — what differs between two runs
+### `sillon diff` — what differs between runs
+
+```bash
+sillon diff baseline refined            # compare two runs
+sillon diff baseline refined --source   # ...and show the source diff
+sillon diff --across tag=sweep          # what varies across a set
+sillon diff --across                    # ...across the whole project
+```
+
+Reports parameters with a real delta, whether the code differed **in logic or
+only in a tuned constant**, and whether the results moved. Arrays are compared
+by shape, dtype and hash — never element by element — so a diff stays fast on
+large results.
+
+```text
+  Parameter    From    To     Δ
+  degree       3       5      (+66.67%)
+
+Code  same logic 4756b7f9 — constants differ in run.py
+
+  Result   From              To                 
+  coef     float64 (4,)      float64 (6,)        shape changed
+  rmse     9.7456762644862…  6.1295293145338…    (-37.11%)
+  field    float64 (5000,)   float64 (5000,)     contents differ
+```
+
+`--across` answers the question a sweep leaves behind — which knobs were
+actually turned:
+
+```text
+  varying   degree: 1, 2, 3, 4, 5
+  varying   ridge: 0.0, 0.1
+  constant  seed, solver
+  code      one version (98167c00)
+```
+
+When a set spans more than one code version it says so, because those runs are
+not all comparable.
+
+| Flag | Effect |
+|---|---|
+| `--across [KEY=VALUE ...]` | Summarise a set instead of comparing two. `tag=sweep`, `status=SUCCESS`, or nothing for the whole project. |
+| `--source` | Also print the unified source diff. |
+| `--max-bytes N` | Largest result to load for comparison (default 64 MB). Bigger ones are compared by shape and dtype and reported as not compared. |
+
+### `sillon compare` — superseded by `diff`
 
 ```bash
 sillon compare baseline refined
 ```
 
-Parameters, metadata and source differences. Takes exactly two runs.
+Kept for compatibility and now a thin adapter over `diff`. Use `sillon diff`.
 
 ### `sillon whose` — which run produced this file
 

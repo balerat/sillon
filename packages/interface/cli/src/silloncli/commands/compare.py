@@ -19,12 +19,17 @@ def add_parser(command_subparser):
 def command(engine, storage_root, args):
     """CLI Compare command — themed parameter / context / source diff."""
     if len(args.get("run_name")) != 2:
-        raise ValueError("Please give two run names")
+        print("✖ Error: compare needs exactly two runs. See also `sillon diff`.")
+        return None
     run1, run2 = args.get("run_name")
 
-    result = compare(engine, run1, run2)
-    if result["status"] != "success":
-        raise ValueError("[CLI]: compare did not succeed")
+    try:
+        result = compare(engine, run1, run2, storage_root)
+    except LookupError as e:
+        # Every other command reports a missing run cleanly; this one used to
+        # surface an IndexError from deep inside the old Reference loader.
+        print(f"✖ Error: {e}")
+        return None
 
     console.rule(f"[bold {c('foam')}]Comparing: {run1} vs {run2}[/]")
 

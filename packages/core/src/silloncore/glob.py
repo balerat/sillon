@@ -345,3 +345,38 @@ class Glob:
     def close(self):
         """Safely closes the underlying HDF5 file."""
         self.file.close()
+
+
+def glob_descriptors(storage_root, uuid, group="result") -> dict:
+    """Shape and dtype of every dataset in a glob group, without reading it.
+
+    HDF5 keeps these in the dataset header, so this is cheap even for a group
+    holding gigabytes — which is what makes a data diff affordable: two arrays
+    with different shapes differ, and nobody had to load either one.
+
+    Args:
+        storage_root (str | Path): The folder containing the `glob` directory.
+        uuid (str): The unique identifier of the simulation run.
+        group (str): The HDF5 group to inspect. Defaults to "result".
+
+    Returns:
+        dict: `{name: {"shape": tuple, "dtype": str, "nbytes": int}}`. Empty if
+            the glob file or the group does not exist.
+    """
+    g_path = Path(storage_root) / "glob" / str(uuid) / "glob.hdf5"
+    if not g_path.exists():
+        return {}
+
+    with h5py.File(str(g_path), "r") as g:
+        if group not in g:
+            return {}
+        out = {}
+        for name, dataset in g[group].items():
+            if not isinstance(dataset, h5py.Dataset):
+                continue
+            out[name] = {
+                "shape": tuple(dataset.shape),
+                "dtype": str(dataset.dtype),
+                "nbytes": int(dataset.nbytes),
+            }
+        return out

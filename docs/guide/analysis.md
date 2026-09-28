@@ -183,11 +183,41 @@ run.manifest()                       # what the run holds
 run.sizes()                          # how much space it takes
 ```
 
+## Comparing runs
+
+```python
+d = project.diff("baseline", "refined")
+
+d["code"]["same_logic"]                 # was this a fair comparison at all?
+d["parameters"]["changed"]["degree"]    # {"old": 3, "new": 5, "delta_pct": 66.67}
+d["results"]["rmse"]["delta_pct"]       # -37.11
+d["results"]["coef"]["reason"]          # "shape"
+```
+
+Results are compared by **shape, dtype and hash**, never element by element, so
+this stays fast on large arrays. Anything above `max_bytes` (64 MB by default)
+is compared by shape and dtype alone and reported as `status="unknown"` rather
+than silently guessed at.
+
+The `code` block is the one to read first: it says whether the two runs differ
+in *logic* or only in a tuned constant, which decides whether the rest of the
+diff means anything.
+
+For a whole sweep:
+
+```python
+across = project.diff_across(has_tag="sweep")
+across["varying"]         # {"degree": [1,2,3,4,5], "ridge": [0.0, 0.1]}
+across["constant"]        # {"seed": 7, "solver": "lstsq"}
+across["logic_versions"]  # more than one means they are not all comparable
+```
+
 ## Housekeeping
 
 ```python
 project.rename(run, "better_name")
 project.delete_run(run)              # removes the row and its stored data
-project.compare("run_a", "run_b")    # what differs between two runs
+project.diff("run_a", "run_b")       # what differs between two runs
+project.diff_across(has_tag="sweep") # what varies across a set
 project.find_by_hash("out/fig.png")  # which run produced this file
 ```

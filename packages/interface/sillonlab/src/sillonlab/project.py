@@ -11,6 +11,8 @@ from silloncore.engine import (
     rename_run as engine_rename_run,
     find_by_hash as engine_find_by_hash,
     compare as engine_compare,
+    diff as engine_diff,
+    diff_across_runs as engine_diff_across,
 )
 
 from sillonlab.display import print_context
@@ -329,7 +331,60 @@ class Project:
             dict: The engine diff payload (`diff_param`, `diff_status`,
                 `diff_runtime`, `diff_source`).
         """
-        return engine_compare(self.engine, run_name1, run_name2)
+        return engine_compare(self.engine, run_name1, run_name2, self.storage_root)
+
+    def diff(self, run_name1: str, run_name2: str, max_bytes: int = None) -> dict:
+        """Compares two runs: parameters, code, results and context.
+
+        Richer than `compare`, which only reaches parameters, status, runtime
+        and a source-text diff. This also reports whether the code differed *in
+        logic* or only in a tuned constant, and whether the results moved —
+        arrays by shape, dtype and hash rather than element by element.
+
+        Example:
+            ```python
+            d = project.diff("baseline", "refined")
+            d["code"]["same_logic"]          # was this a fair comparison?
+            d["parameters"]["changed"]       # {key: {old, new, delta_pct}}
+            d["results"]["rmse"]["delta_pct"]
+            ```
+
+        Args:
+            run_name1 (str): Baseline run name, uuid, or uuid prefix.
+            run_name2 (str): Target run.
+            max_bytes (int, optional): Largest result to load for comparison.
+                Bigger ones are compared by shape and dtype only.
+
+        Raises:
+            LookupError: If either run cannot be found.
+
+        Returns:
+            dict: `{"runs", "parameters", "code", "results", "context"}`.
+        """
+        return engine_diff(self.engine, self.storage_root, run_name1, run_name2, max_bytes)
+
+    def diff_across(self, run_names=None, **query) -> dict:
+        """What varies, and what is held fixed, across a set of runs.
+
+        The question a sweep leaves behind months later: which knobs were
+        actually turned?
+
+        Example:
+            ```python
+            project.diff_across(has_tag="sweep")
+            # {"varying": {"degree": [1,2,3,4,5], "ridge": [0.0, 0.1]},
+            #  "constant": {"seed": 7, "solver": "lstsq"}, ...}
+            ```
+
+        Args:
+            run_names (list[str], optional): Explicit runs. Omit to use every
+                run matching the filters.
+            **query: Cheap filters (`has_tag`, `fields`, `parameters`, ...).
+
+        Returns:
+            dict: `{"run_count", "varying", "constant", "logic_versions", "runs"}`.
+        """
+        return engine_diff_across(self.engine, run_names, **query)
 
     # ---------------------------------------------------------
     # Container protocol
