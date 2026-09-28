@@ -5,7 +5,14 @@ import sys
 import time
 
 from .serverCom import ServerCom
-from .metadata import get_imports, save_custom_sources, load_main_script_source, get_user_script_path
+from .metadata import (
+    get_imports,
+    collect_code_sources,
+    load_main_script_source,
+    get_user_script_path,
+)
+from silloncommon.codeversion import compute_version
+from silloncommon.source_store import store_sources
 from silloncommon.commands import (
     LogResultCmd,
     LogFigureCmd,
@@ -118,11 +125,46 @@ class Tracker:
             "sillon.python.cwd": self.cwd,
             "sillon.main_script_source": load_main_script_source(self.main_script_path),
             "sillon.python.custom_modules": custom_modules,
-            # "sillon.python.sys_modules": sys_modules,
-            # "sillon.python.source_custom_modules": save_custom_sources(custom_modules), Need to implement a clever way of sending that to the server.
         }
         for key, value in self.metadata.items():
             self.add_metadata(key, value)
+
+        self.record_code_version()
+
+    def record_code_version(self):
+        """Version this run by the code that produced it.
+
+        Covers the entry script and the user's own modules, so editing your own
+        library counts as a code change. The sources are hashed *here* and only
+        the digests travel -- the same trick used for large arrays, and the
+        answer to the long-standing "clever way of sending that to the server"
+        note: the server never needs the text to identify the version.
+
+        The text is still kept, in a content-addressed store under
+        `.sillon/sources/`, so a diff can show what actually changed. Identical
+        files across a whole sweep are stored once.
+
+        Never fatal: a run must not be lost because its code could not be read.
+        """
+        try:
+            sources = collect_code_sources(self.main_script_path, self.project_path)
+            if not sources:
+                return
+
+            version = compute_version(sources)
+            store_sources(self.project_path, sources, version["files"])
+
+            self.add_metadata(
+                "sillon.code.version",
+                {
+                    "logic_version": version["logic_version"],
+                    "ast_version": version["ast_version"],
+                    "source_version": version["source_version"],
+                    "files": version["files"],
+                },
+            )
+        except Exception:
+            pass
 
 
     def close(self):

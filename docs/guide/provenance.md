@@ -64,6 +64,76 @@ run.children()           # runs that inherited from this one
 The parent must already exist; `inherit` raises if it does not, rather than
 recording a dangling edge.
 
+## Code versions
+
+The question this answers: *"I fixed a sign error in September — which of my 135
+runs used the fixed code?"*
+
+Every run records a hash of the code that produced it. Not a hash of the text —
+that would report a new version every time you tuned a constant or added a
+comment, which makes it useless. Instead the code is parsed and hashed
+**structurally**, with literal values normalised away:
+
+| Change | New version? |
+|---|---|
+| `N = 5` → `N = 4` | no |
+| a comment, a reformat | no |
+| `kinetic - potential` → `kinetic + potential` | **yes** |
+| a changed function in your own library | **yes** |
+
+### It covers your own modules, not just the script
+
+A run's version spans the entry script **and** every module of yours that was
+imported. Editing your own library counts as a code change, which is usually
+where the change actually is.
+
+Third-party libraries and sillon itself are excluded — only your code.
+
+```bash
+$ sillon versions
+  2 code versions across this project
+
+  Version    Runs   First seen   Last seen   Constants   Covers
+  f10236bb     72   Aug 02       Aug 24          3       all code
+  744e82d9     63   Aug 25       Sep 28          —       all code
+```
+
+`Constants` says how many literal-level variants share that logic — runs that
+differ only by a value you tuned.
+
+Then drill into one, and see which file moved:
+
+```bash
+$ sillon versions 744e82d9
+  File                Logic      Exact
+  run.py              cf6d74aa   46a8ba01
+  lattice/ham.py      f220bf39   ffc5a3e8
+```
+
+### Filtering by version
+
+```python
+clean = project.query(fields={"logic_version": "744e82d9..."})
+```
+
+### Older runs
+
+Runs logged before this feature have no version, but they did record their entry
+script, so it can be recovered:
+
+```bash
+sillon versions --backfill
+```
+
+Those cover the **entry script only** — nobody stored your modules back then —
+and are labelled that way so they are never mistaken for a full version.
+
+### What it cannot see
+
+Modules imported lazily *inside a function* after the run starts are not
+included: the module list is taken when the run opens. Top-level imports, which
+is nearly everything, are covered.
+
 ## Which run produced this file?
 
 Every logged value and file is hashed. Given a file on disk:

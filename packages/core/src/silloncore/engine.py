@@ -18,6 +18,7 @@ from silloncommon.database import (
     db_delete_runs,
     db_rename_run,
     next_available_name,
+    db_backfill_code_versions,
 )
 
 from silloncore.glob import read_glob, read_glob_many, append_glob, glob_sizes, get_hash
@@ -466,6 +467,7 @@ def _searchable_columns(entry: dict) -> dict:
         "platform": entry.get("platform"),
         "runtime": entry.get("runtime"),
         "sillonversion": entry.get("sillonversion"),
+        "logic_version": entry.get("logic_version"),
     }
     columns.update(entry.get("hashes") or {})  # git, source, ... -> top level
     return columns
@@ -1382,4 +1384,169 @@ def compare(engine, run_id1, run_id2) -> dict:
         "diff_status": diff_engine.diff_status,
         "diff_runtime": diff_engine.diff_runtime,
         "diff_source": diff_engine.diff_source,
+    }
+
+
+# ==========================================
+#              CODE VERSIONS
+# ==========================================
+
+
+def _constant_variant_key(entry: dict) -> str:
+    """The finer identity inside a logic version: its exact source hashes.
+
+    Two runs can share a logic version and still differ by a tuned constant.
+    This distinguishes those without promoting them to separate versions.
+
+    Keyed on `ast_hash`, not `source_hash`: the AST level still sees a changed
+    literal but ignores comments and reformatting, so editing a comment does not
+    masquerade as a new constant variant.
+    """
+    files = (entry.get("meta_data") or {}).get("sillon.code.version") or {}
+    per_file = files.get("files") or {}
+    return "|".join(f"{name}:{h.get('ast_hash','')}" for name, h in sorted(per_file.items()))
+
+
+def get_code_versions(engine) -> list:
+    """Groups a project's runs by the version of the code that produced them.
+
+    The version covers the entry script and the user's own modules, hashed at
+    the AST level with literals normalised away — so runs that differ only by a
+    tuned constant land in the *same* group, and a real change to a function
+    body starts a new one.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+
+    Returns:
+        list[dict]: Newest first. Each group has `logic_version`, `run_count`,
+            `first_seen`, `last_seen`, `runs`, `files` (name -> hashes, from a
+            representative run) and `constant_variants`, the number of distinct
+            literal-level variants inside the group.
+    """
+    index = select_run_index(engine)
+
+    groups = {}
+    for entry in index:
+        version = entry.get("logic_version")
+        group = groups.setdefault(
+            version,
+            {
+                "logic_version": version,
+                "runs": [],
+                "dates": [],
+                "variants": set(),
+                "files": {},
+                "partial": False,
+            },
+        )
+        group["runs"].append(entry["name"])
+        if entry.get("date"):
+            group["dates"].append(entry["date"])
+        group["variants"].add(_constant_variant_key(entry))
+        recorded = (entry.get("meta_data") or {}).get("sillon.code.version") or {}
+        if recorded.get("partial"):
+            group["partial"] = True
+        if not group["files"]:
+            group["files"] = recorded.get("files") or {}
+
+    out = []
+    for group in groups.values():
+        dates = sorted(d for d in group["dates"] if d)
+        out.append(
+            {
+                "logic_version": group["logic_version"],
+                "run_count": len(group["runs"]),
+                "runs": group["runs"],
+                "first_seen": dates[0] if dates else None,
+                "last_seen": dates[-1] if dates else None,
+                "constant_variants": len([v for v in group["variants"] if v]),
+                "files": group["files"],
+                # Recovered from a run logged before versioning existed: the
+                # entry script only, so not comparable with a full version.
+                "partial": group["partial"],
+            }
+        )
+
+    out.sort(key=lambda g: (g["last_seen"] or "", g["run_count"]), reverse=True)
+    return out
+
+
+def get_code_version_files(engine, logic_version: str) -> dict:
+    """The per-file hashes of one code version.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        logic_version (str): A full version hash or an unambiguous prefix.
+
+    Raises:
+        LookupError: If no version matches, or a prefix matches several.
+
+    Returns:
+        dict: `{"logic_version": str, "files": {name: {hashes}}, "run_count": int}`.
+    """
+    matches = [
+        group
+        for group in get_code_versions(engine)
+        if group["logic_version"] and group["logic_version"].startswith(logic_version)
+    ]
+    if not matches:
+        raise LookupError(f"No code version matching '{logic_version}'.")
+    if len(matches) > 1:
+        raise LookupError(
+            f"'{logic_version}' matches {len(matches)} code versions — use more characters."
+        )
+    group = matches[0]
+    return {
+        "logic_version": group["logic_version"],
+        "files": group["files"],
+        "run_count": group["run_count"],
+    }
+
+
+def backfill_code_versions(engine, storage_root, dry_run: bool = False) -> dict:
+    """Computes code versions for runs logged before versioning existed.
+
+    Those runs already recorded their entry script, so the version is
+    recoverable — but only for that one file: nobody stored the user's modules
+    back then. A backfilled version therefore covers the entry script alone and
+    is marked `partial`, so it is never silently compared against a full one.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        storage_root (str | Path): The project storage root.
+        dry_run (bool): Report what would change without writing.
+
+    Returns:
+        dict: `{"eligible", "updated", "skipped", "versions"}`.
+    """
+    from silloncommon.codeversion import compute_version
+
+    index = select_run_index(engine)
+    pending = [entry for entry in index if not entry.get("logic_version")]
+
+    updates, skipped = {}, 0
+    for entry in pending:
+        snapshot = {
+            "uuid": entry["uuid"],
+            "name": entry["name"],
+            "meta_data": entry.get("meta_data") or {},
+        }
+        source = load_run_source(storage_root, snapshot)
+        if not source or source == "Source code not found.":
+            skipped += 1
+            continue
+
+        version = compute_version({"<entry script>": source})
+        version["partial"] = True
+        updates[entry["uuid"]] = version
+
+    if not dry_run and updates:
+        db_backfill_code_versions(engine, updates)
+
+    return {
+        "eligible": len(pending),
+        "updated": len(updates),
+        "skipped": skipped,
+        "versions": len({v["logic_version"] for v in updates.values()}),
     }

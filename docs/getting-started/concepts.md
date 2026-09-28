@@ -34,6 +34,30 @@ result is something the run produced. Keeping them apart is what makes
 `query(parameters={...})` answer "which settings did I try?" and
 `sort_by("rmse")` answer "which worked best?".
 
+### Code version
+
+Every run records a hash of the code that produced it — the entry script **and**
+your own imported modules. It is computed from the parsed structure of the code
+with literal values normalised away, which means:
+
+| Change | New version? |
+|---|---|
+| `N = 5` → `N = 4` | no — a tuned constant is not a code change |
+| adding a comment, reformatting | no |
+| `kinetic - potential` → `kinetic + potential` | **yes** |
+| editing a function in your own library | **yes** |
+
+That distinction is the whole point: it lets you ask *"which of my runs used the
+code from before I fixed that bug?"* and get a trustworthy answer.
+
+```bash
+sillon versions
+```
+
+```python
+project.query(fields={"logic_version": "c8d012…"})
+```
+
 ### Run status
 
 Every run records how it ended, and this is meant to be trusted:

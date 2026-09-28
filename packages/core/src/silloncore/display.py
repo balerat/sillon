@@ -383,3 +383,62 @@ def print_projects(records: list) -> None:
         summary += f" — {missing} no longer on disk (sillon projects --prune)"
     subtitle = Text(summary, style=f"italic {c('ember')}")
     console.print(themed_panel(Group(subtitle, Text(""), table), title="Projects"))
+
+
+def print_code_versions(groups: list) -> None:
+    """Prints a `silloncore.engine.get_code_versions` payload."""
+    table = themed_table(padding=(0, 2))
+    table.add_column("Version", style=f"bold {c('spray')}")
+    table.add_column("Runs", justify="center", style=c("wake"))
+    table.add_column("First seen", style=S_DIM)
+    table.add_column("Last seen", style=S_DIM)
+    table.add_column("Constants", justify="center", style=S_DIM)
+    table.add_column("Covers", style=S_DIM)
+
+    unversioned = 0
+    for group in groups:
+        version = group["logic_version"]
+        if not version:
+            unversioned = group["run_count"]
+            continue
+        variants = group["constant_variants"]
+        table.add_row(
+            Text(short_id(version)),
+            str(group["run_count"]),
+            relative_time(group["first_seen"]) if group["first_seen"] else "—",
+            relative_time(group["last_seen"]) if group["last_seen"] else "—",
+            str(variants) if variants > 1 else "—",
+            "entry script only" if group.get("partial") else "all code",
+        )
+
+    versioned = len([g for g in groups if g["logic_version"]])
+    summary = f"{versioned} code version{'s' if versioned != 1 else ''} across this project"
+    if unversioned:
+        summary += f" — {unversioned} run(s) logged before code versioning"
+    subtitle = Text(summary, style=f"italic {c('ember')}")
+    console.print(themed_panel(Group(subtitle, Text(""), table), title="Code versions"))
+
+
+def print_code_version_files(detail: dict) -> None:
+    """Prints the per-file breakdown of one code version."""
+    table = themed_table(padding=(0, 2))
+    table.add_column("File", style=f"bold {c('spray')}", overflow="fold", ratio=1)
+    table.add_column("Logic", style=S_DIM)
+    table.add_column("Exact", style=S_DIM)
+
+    for name, hashes in sorted(detail["files"].items()):
+        table.add_row(
+            Text(name),
+            short_id(hashes.get("logic_hash", "")),
+            short_id(hashes.get("source_hash", "")),
+        )
+
+    subtitle = Text(
+        f"{detail['run_count']} run(s) used this version", style=f"italic {c('ember')}"
+    )
+    console.print(
+        themed_panel(
+            Group(subtitle, Text(""), table),
+            title=f"version · {short_id(detail['logic_version'])}",
+        )
+    )

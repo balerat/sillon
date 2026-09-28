@@ -101,12 +101,36 @@ def commit_parent(simulation_obj, parent):
     simulation_obj.parents.append(parent)
 
 
+def commit_code_version(simulation_obj, version):
+    """Records the code version the client computed for this run.
+
+    The client hashes its own sources (entry script plus the user's own
+    modules) and sends only the digests, so the daemon never has to receive the
+    text to identify a version.
+
+    Args:
+        simulation_obj (Simulation): The active simulation instance.
+        version (dict): `{"logic_version", "ast_version", "source_version",
+            "files"}` from `silloncommon.codeversion.compute_version`.
+    """
+    if not isinstance(version, dict):
+        return
+    simulation_obj.logic_version = version.get("logic_version")
+    simulation_obj.code_version = version
+    # add_metadata routes a METADATA_TABLE key to its handler *instead of*
+    # storing it, so keep the payload ourselves -- the per-file hashes are what
+    # let `sillon versions --files` and `sillon diff --versions` say which
+    # module moved.
+    simulation_obj.metadata["sillon.code.version"] = version
+
+
 # A lookup table to process sillon custom metadata when it arrives.
 METADATA_TABLE = {
     "sillon.main_script_source": commit_source,
     "sillon.runtime": commit_runtime,
     "sillon.status": commit_status,
     "sillon.parent": commit_parent,
+    "sillon.code.version": commit_code_version,
     # "sillon.isdirty": commit_isdirty,
 }
 
@@ -224,6 +248,8 @@ class Simulation:
 
         self.runtime = ""
         self.status = "RUNNING"
+        self.logic_version = None
+        self.code_version = None
 
         self.parameters: Dict[str, Any] = {}
         self.results: Dict[str, ResultItem] = {}

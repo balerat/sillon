@@ -184,6 +184,11 @@ class SimulationTable(SQLModel, table=True):
     # {"uuid", "name", "params": [inherited param names]}.
     parents: Optional[List[Any]] = Field(default_factory=list, sa_column=Column(JSON))
 
+    # The code that produced the run, hashed at the AST level so a tuned
+    # constant does not read as a new version. Indexed: "which runs used the
+    # code with the bug in it" is a filter, not a scan.
+    logic_version: Optional[str] = Field(default=None, index=True)
+
     # Execution & Environment Metadata
     runtime: Optional[str]
     status: Optional[str] = Field(default=None, index=True)
@@ -366,6 +371,7 @@ def insert_multiple_simulations(
             project=run.project_name,
             sillonversion=sillon_VERSION,
             status=run.status,
+            logic_version=getattr(run, "logic_version", None),
             runtime=run.runtime,
         )
 
@@ -442,6 +448,7 @@ def insert_simulation(run: "Simulation", session: Session) -> SimulationTable:
         project=run.project_name,
         sillonversion=sillon_VERSION,
         status=run.status,
+        logic_version=getattr(run, "logic_version", None),
         runtime=run.runtime,
     )
 
@@ -1052,6 +1059,7 @@ def select_run_index(engine: Engine) -> List[Dict[str, Any]]:
                     "name": run.name,
                     "date": run.date,
                     "status": run.status,
+                    "logic_version": run.logic_version,
                     "author": run.author,
                     "hostname": run.hostname,
                     "platform": run.platform,
@@ -1324,3 +1332,33 @@ def db_append_metadata(
         session.commit()
 
     return updated_runs
+
+
+def db_backfill_code_versions(engine: Engine, updates: dict) -> int:
+    """Writes recovered code versions onto existing runs.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        updates (dict): `{run uuid: version dict}` from
+            `silloncore.engine.backfill_code_versions`.
+
+    Returns:
+        int: How many rows were updated.
+    """
+    changed = 0
+    with Session(engine) as session:
+        for uuid_value, version in updates.items():
+            run = session.exec(
+                select(SimulationTable).where(SimulationTable.uuid == uuid_value)
+            ).first()
+            if run is None:
+                continue
+            run.logic_version = version.get("logic_version")
+            meta = dict(run.meta_data or {})
+            meta["sillon.code.version"] = version
+            run.meta_data = meta
+            flag_modified(run, "meta_data")
+            session.add(run)
+            changed += 1
+        session.commit()
+    return changed

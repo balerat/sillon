@@ -16,6 +16,7 @@ import silloncli.commands.rename as rename
 import silloncli.commands.whose as whose
 import silloncli.commands.lineage as lineage
 import silloncli.commands.projects as projects
+import silloncli.commands.versions as versions
 
 from silloncommon import __version__
 
@@ -38,6 +39,7 @@ COMMAND_LIST = {
     "whose": whose,
     "lineage": lineage,
     "projects": projects,
+    "versions": versions,
 }
 
 

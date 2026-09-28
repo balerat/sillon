@@ -69,6 +69,24 @@ sillon search -r coef                      # runs that have this result
 
 Values are parsed as Python literals, so `-p lr=0.01` compares as a float.
 
+### `sillon versions` — group runs by the code that produced them
+
+```bash
+sillon versions                # every code version in the project
+sillon versions c8d012         # the per-file breakdown of one version
+sillon versions --backfill     # recover versions for runs logged before this existed
+```
+
+A run's code version covers its **entry script and your own modules**, hashed at
+the AST level with literal values normalised away — so a tuned constant
+(`N = 5` → `N = 4`) does *not* start a new version, while a changed expression
+does. See [Code versions](../guide/provenance.md#code-versions).
+
+| Flag | Effect |
+|---|---|
+| `--backfill` | Recover versions for older runs from their stored entry script. Those cover the entry script only and are shown as such. |
+| `--files` | Per-file hashes (implied when you name a version). |
+
 ### `sillon projects` — every project on this machine
 
 ```bash
