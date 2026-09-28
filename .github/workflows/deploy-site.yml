@@ -1,0 +1,66 @@
+name: Deploy Docs to sillonlab.dev
+
+# Builds the MkDocs site (landing page = overrides/home.html, used by
+# docs/index.md via `template: home.html`) and uploads it to S3 behind CloudFront.
+
+on:
+  push:
+    branches: ["main"]
+    # Optional: only run when the site or the documented code changed
+    # paths:
+    #   - 'docs/**'
+    #   - 'overrides/**'
+    #   - 'packages/**'
+    #   - 'mkdocs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docs
+  cancel-in-progress: true
+
+env:
+  BUCKET: sillonlab-site
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Clone the monorepo (code + docs)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      # 3. Install MkDocs + the sillon packages (mkdocstrings imports them), build into ./site
+      - name: Install and Build MkDocs
+        run: |
+          pip install -r requirements.txt
+          make install
+          mkdocs build
+
+      # 4. Authenticate to AWS with the gitsillonlab.dev IAM user
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # 5. Upload the built site; --delete removes pages that no longer exist
+      - name: Deploy to S3
+        run: aws s3 sync site "s3://$BUCKET" --delete
+
+      # 6. Clear CloudFront's cache so the new version is served immediately
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"
