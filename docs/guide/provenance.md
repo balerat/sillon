@@ -29,6 +29,30 @@ run.figures        # {'fit': {'used': ['coef', 'degree'], 'caption': ...}}
 This costs one argument at logging time and is the difference between a figure
 you can defend and one you have to reproduce from memory.
 
+## Which data produced this analysis?
+
+The same idea as figures, for the quantities you derive after the fact:
+
+```python
+spectrum = np.fft.rfft(run.load_result("field"))
+run.add_analysis("spectrum", spectrum, used=["field"])
+```
+
+```bash
+$ sillon show my_run -A
+  spectrum   ← computed from: field
+```
+
+Omit `used=` and sillon fills it in from what you actually loaded from that run
+in this session, which is usually exactly right:
+
+```python
+data = run.load_result("field") * run.load_result("energy")
+run.add_analysis("scaled", data)          # used = ["energy", "field"]
+```
+
+Passing `used=` explicitly always wins over the inferred value.
+
 ## Which run derives from which?
 
 Usually you do not have to say. If your script loads an earlier run's data

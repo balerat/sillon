@@ -238,10 +238,13 @@ def render_run_card(report: dict):
     if report["analyses"]:
         lines.append(Text("Analyses", style=f"bold {c('foam')}"))
         for name, meta in report["analyses"].items():
-            comment = (meta.get("meta") or {}).get("comment")
+            info = meta.get("meta") or {}
             line = _sized_line(name, {"bytes": meta.get("size")})
-            if comment:
-                line.append(f"  ({comment})", style=S_DIM)
+            used = info.get("used") or []
+            if used:
+                line.append(f"  ← computed from: {', '.join(used)}", style=S_DIM)
+            if info.get("comment"):
+                line.append(f"  ({info['comment']})", style=S_DIM)
             lines.append(line)
 
     if report.get("parents"):
@@ -618,3 +621,52 @@ def print_diff_across(result: dict) -> None:
 
     subtitle = Text(f"{result['run_count']} runs", style=f"italic {c('ember')}")
     console.print(themed_panel(Group(subtitle, Text(""), *lines), title="Across runs"))
+
+
+def print_similar_runs(result: dict) -> None:
+    """Prints a `silloncore.engine.find_similar_runs` payload."""
+    matches = result["matches"]
+    if not matches:
+        console.print(f"[{c('slate')}]No other runs to compare against.[/]")
+        return
+
+    table = themed_table(padding=(0, 2))
+    table.add_column("Match", justify="right", style=c("wake"))
+    table.add_column("Run", style=f"bold {c('spray')}")
+    table.add_column("Differences", style=S_DIM, overflow="fold", ratio=1)
+    table.add_column("Code", justify="center", style=S_DIM)
+
+    for match in matches:
+        if match["changes"]:
+            changes = ", ".join(
+                f"{key} {format_value(old)}→{format_value(new)}"
+                for key, (old, new) in list(match["changes"].items())[:4]
+            )
+            if len(match["changes"]) > 4:
+                changes += f", … (+{len(match['changes']) - 4})"
+        elif match["only_in_other"] or match["missing_here"]:
+            # No *shared* key differs, but the two runs are not describing the
+            # same thing -- saying "identical parameters" here would be a lie.
+            changes = "different parameter set"
+        else:
+            changes = "identical parameters"
+
+        extra = []
+        if match["only_in_other"]:
+            extra.append(f"+{len(match['only_in_other'])} extra")
+        if match["missing_here"]:
+            extra.append(f"−{len(match['missing_here'])} missing")
+        if extra:
+            changes += f"  [{', '.join(extra)}]"
+
+        table.add_row(
+            f"{match['score'] * 100:.0f}%",
+            match["name"],
+            changes,
+            "same" if match["same_code"] else "—",
+        )
+
+    subtitle = Text(
+        f"most like {result['run']}", style=f"italic {c('ember')}"
+    )
+    console.print(themed_panel(Group(subtitle, Text(""), table), title="Similar runs"))

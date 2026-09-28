@@ -33,7 +33,7 @@ sillon show my_fit -p                 # parameters
 sillon show my_fit -r                 # results
 sillon show my_fit -m %all%           # all metadata
 sillon show my_fit -f                 # figures, with their provenance
-sillon show my_fit -A                 # everything
+sillon show my_fit -A                 # analyses, with their provenance
 ```
 
 | Flag | Shows |
@@ -43,8 +43,8 @@ sillon show my_fit -A                 # everything
 | `-m [KEY ...]` | metadata — `%all%` for everything |
 | `-t` | tags |
 | `-f` | figures and what they were built from |
+| `-A` | analyses and what they were computed from |
 | `-n` | notes |
-| `-A` | all of the above |
 
 ### `sillon search` — find runs
 
@@ -162,6 +162,28 @@ sillon compare baseline refined
 ```
 
 Kept for compatibility and now a thin adapter over `diff`. Use `sillon diff`.
+
+### `sillon like` — runs similar to a given one
+
+```bash
+sillon like happy_perlman
+sillon like happy_perlman --limit 5
+```
+
+*"Did I do something close to this?"* — ranked by how much of the configuration
+two runs share, with a tiebreak on how far the differing values moved, so
+`degree 3→2` ranks above `degree 3→5`.
+
+```text
+  Match   Run         Differences                  Code
+    75%   d2_r0.0     degree 3→2                   same
+    75%   d4_r0.0     degree 3→4                   same
+    50%   d2_r0.1     degree 3→2, ridge 0.0→0.1    same
+    17%   unrelated   different parameter set      —
+```
+
+More useful than an exact-duplicate check, which only fires on a perfect repeat
+and says nothing about the near misses.
 
 ### `sillon whose` — which run produced this file
 

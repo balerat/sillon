@@ -171,6 +171,24 @@ class Run:
     # Loading functions
     # ---------------------------------------------------------
 
+    def _items_read_from_me(self) -> list:
+        """Which of this run's values this process has loaded.
+
+        An analysis is normally computed from data you just loaded, and the
+        access log already knows what that was — so `used=` can be inferred
+        instead of retyped. Explicit beats inferred whenever you pass it.
+        """
+        from silloncommon.access_log import reads
+
+        try:
+            self._load_snapshot()
+            for entry in reads():
+                if entry["uuid"] == str(self.uuid):
+                    return list(entry["items"])
+        except Exception:
+            pass
+        return []
+
     def _note_read(self, item: str = None) -> None:
         """Record that this process pulled this run's data.
 
@@ -395,22 +413,42 @@ class Run:
             metadata = dict(key_or_dict)
         return self._annotate(metadata=metadata)
 
-    def add_analysis(self, name: str, data, **info) -> dict:
+    def add_analysis(self, name: str, data, used=None, **info) -> dict:
         """Attaches post-processed data to the run for later reuse.
 
         Use this when you derive new data from the run after the fact: for
         example, if the simulation fitted a function, store `f(x)` evaluated
         on your grid of interest and reload it later with `load_analysis`.
 
+        `used` records which of the run's own values the analysis was computed
+        from — the same idea as `log_figure(used=...)`, so a derived quantity
+        does not lose its origin the moment you compute it:
+
+        ```python
+        spectrum = np.fft.rfft(run.load_result("field"))
+        run.add_analysis("spectrum", spectrum, used=["field"])
+        ```
+
+        Omit it and sillon fills it in from what this process actually loaded
+        from this run, which is usually exactly right.
+
         Args:
             name (str): The analysis name.
             data (Any): The processed data to store (array-like).
-            **info: Free-form context saved with the analysis (e.g.,
-                `inputs=["coef"]`, `comment="evaluated on fine grid"`).
+            used (str | list, optional): The run's results/parameters this was
+                computed from. Inferred from what you loaded when omitted.
+            **info: Free-form context saved with the analysis (e.g.
+                `comment="evaluated on fine grid"`).
 
         Returns:
             dict: The stored analysis row (name, hash, date...).
         """
+        if used is None:
+            used = self._items_read_from_me()
+        elif isinstance(used, str):
+            used = [used]
+        info["used"] = sorted(set(used or []))
+
         row = add_run_analysis(
             self.engine, self.storage_root, self._load_snapshot(), name, data, info
         )

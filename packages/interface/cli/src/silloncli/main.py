@@ -18,6 +18,7 @@ import silloncli.commands.lineage as lineage
 import silloncli.commands.projects as projects
 import silloncli.commands.versions as versions
 import silloncli.commands.diff as diff
+import silloncli.commands.like as like
 
 from silloncommon import __version__
 
@@ -42,6 +43,7 @@ COMMAND_LIST = {
     "projects": projects,
     "versions": versions,
     "diff": diff,
+    "like": like,
 }
 
 

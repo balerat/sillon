@@ -1623,3 +1623,30 @@ def diff_across_runs(engine, run_names=None, **query) -> dict:
     result = diff_across(entries)
     result["runs"] = [e["name"] for e in entries]
     return result
+
+
+def find_similar_runs(engine, run_id, limit: int = 10) -> dict:
+    """Runs most like a given one, ranked by shared configuration.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        run_id (str): The run to compare against (name, uuid, or prefix).
+        limit (int): How many to return.
+
+    Raises:
+        LookupError: If the run cannot be found.
+
+    Returns:
+        dict: `{"run": name, "matches": [...]}` — see `diff.rank_similar`.
+    """
+    from silloncore.diff import rank_similar
+
+    index = select_run_index(engine)
+    target = next(
+        (e for e in index if e["name"] == run_id or str(e["uuid"]).startswith(str(run_id))),
+        None,
+    )
+    if target is None:
+        raise LookupError(f"Run '{run_id}' not found.")
+
+    return {"run": target["name"], "matches": rank_similar(target, index, limit)}

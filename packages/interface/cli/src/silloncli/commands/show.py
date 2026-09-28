@@ -78,9 +78,15 @@ def _print_sections(report: dict, args: dict) -> None:
     if args.get("analysis") and report["analyses"]:
         lines.append(Text("Analyses", style=f"bold {c('foam')}"))
         for name, meta in report["analyses"].items():
-            comment = (meta.get("meta") or {}).get("comment")
-            lines.append(Text.assemble((f"  {name}", S_VALUE),
-                                       (f"  ({comment})" if comment else "", S_DIM)))
+            info = meta.get("meta") or {}
+            used = ", ".join(info.get("used") or [])
+            prov = f"  ← computed from: {used}" if used else ""
+            comment = info.get("comment")
+            lines.append(Text.assemble(
+                (f"  {name}", S_VALUE),
+                (prov, S_DIM),
+                (f"  ({comment})" if comment else "", S_DIM),
+            ))
     if args.get("note") and report["notes"]:
         lines.append(Text("Notes", style=f"bold {c('foam')}"))
         lines += [Text(f"  • {note}", style=f"italic {c('slate')}") for note in report["notes"]]

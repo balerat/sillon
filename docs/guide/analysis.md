@@ -166,13 +166,35 @@ Computed something from a run and want it kept with the run?
 
 ```python
 spectrum = np.fft.rfft(run.load_result("field"))
-run.add_analysis("spectrum", spectrum, method="rfft")
+run.add_analysis("spectrum", spectrum, used=["field"], method="rfft")
 
 run.load_analysis("spectrum")
+run.analyses["spectrum"]["used"]     # ['field']
 ```
+
+`used=` records which of the run's values the analysis came from, so a derived
+quantity keeps its origin. Omit it and sillon infers it from what you loaded —
+see [Provenance](provenance.md).
 
 Analyses live beside results in the store and are queryable the same way
 (`project.query(analyses={"spectrum": ...})`).
+
+## Finding similar runs
+
+```python
+for match in project.like("happy_perlman"):
+    print(f"{match['score']:.0%}", match["name"], match["changes"])
+```
+
+```text
+75% d2_r0.0 {'degree': (3, 2)}
+75% d4_r0.0 {'degree': (3, 4)}
+50% d2_r0.1 {'degree': (3, 2), 'ridge': (0.0, 0.1)}
+```
+
+Ranked by shared configuration, with a tiebreak on how far the differing values
+moved. `same_code` on each match tells you whether the two runs were produced by
+the same code version.
 
 ## Exporting
 

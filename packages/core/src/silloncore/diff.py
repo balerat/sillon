@@ -381,3 +381,95 @@ def diff_across(entries: list) -> dict:
         "constant": constant,
         "logic_versions": [v for v in versions if v],
     }
+
+
+# ==========================================
+#               RESEMBLANCE
+# ==========================================
+
+
+def similarity(params_a: dict, params_b: dict) -> dict:
+    """How alike two parameter sets are.
+
+    Scored over the union of their keys, so a run that simply logged fewer
+    parameters is not flattered by the ones it left out.
+
+    Returns:
+        dict: `{"score": 0..1, "shared": int, "differing": [keys],
+            "only_in_a": [keys], "only_in_b": [keys]}`.
+    """
+    keys_a, keys_b = set(params_a), set(params_b)
+    union = keys_a | keys_b
+    if not union:
+        return {
+            "score": 1.0, "shared": 0, "differing": [],
+            "only_in_a": [], "only_in_b": [], "distance": 0.0,
+        }
+
+    shared = [k for k in keys_a & keys_b if params_a[k] == params_b[k]]
+    differing = sorted(k for k in keys_a & keys_b if params_a[k] != params_b[k])
+
+    # Structural overlap alone cannot tell `ridge 0.0 -> 0.1` from
+    # `degree 3 -> 1`: both are one key out of four. So numeric differences
+    # also get a magnitude, used only to order runs that tie on overlap.
+    gaps = []
+    for key in differing:
+        delta = percent_delta(params_a[key], params_b[key])
+        gaps.append(min(abs(delta) / 100.0, 1.0) if delta is not None else 1.0)
+
+    return {
+        "score": len(shared) / len(union),
+        "shared": len(shared),
+        "differing": differing,
+        "only_in_a": sorted(keys_a - keys_b),
+        "only_in_b": sorted(keys_b - keys_a),
+        "distance": sum(gaps) / len(gaps) if gaps else 0.0,
+    }
+
+
+def rank_similar(target: dict, entries: list, limit: int = 10) -> list:
+    """Runs most like a given one, by how much of its configuration they share.
+
+    Answers "did I do something close to this?" — the useful version of
+    duplicate detection, since an exact-match check only fires on a perfect
+    repeat and says nothing about the near misses.
+
+    Args:
+        target (dict): The run index entry to compare against.
+        entries (list[dict]): Candidate entries.
+        limit (int): How many to return.
+
+    Returns:
+        list[dict]: Newest-scoring first, each `{"name", "uuid", "score",
+            "differing", "changes", "same_code"}`, where `changes` maps a
+            differing parameter to its `(target value, candidate value)`.
+    """
+    target_params = target.get("parameters") or {}
+    ranked = []
+
+    for entry in entries:
+        if entry["uuid"] == target["uuid"]:
+            continue
+        params = entry.get("parameters") or {}
+        verdict = similarity(target_params, params)
+        ranked.append(
+            {
+                "name": entry["name"],
+                "uuid": entry["uuid"],
+                "score": verdict["score"],
+                "distance": verdict["distance"],
+                "differing": verdict["differing"],
+                "changes": {
+                    key: (target_params.get(key), params.get(key))
+                    for key in verdict["differing"]
+                },
+                "only_in_other": verdict["only_in_b"],
+                "missing_here": verdict["only_in_a"],
+                "same_code": bool(target.get("logic_version"))
+                and target.get("logic_version") == entry.get("logic_version"),
+            }
+        )
+
+    # Overlap first; among ties, whichever changed least.
+    ranked.sort(key=lambda r: (-r["score"], r["distance"], r["name"]))
+    return ranked[:limit]

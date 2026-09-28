@@ -85,16 +85,28 @@ print(best.to_dataframe())
 the exception type and message — never as a success. A log call that fails
 raises instead of silently dropping your data.
 
-**Figures remember their data.** `log_figure(fig, used=["coef", "degree"])`
-records what drew the plot, so `sillon show -f` can tell you months later:
+**Runs remember their code.** Every run is versioned by what its code *does* —
+your entry script and your own modules, hashed structurally — so tuning a
+constant does not read as a change but fixing a sign error does. `sillon
+versions` then answers the question you actually have: *which of my runs used
+the code from before I fixed that bug?*
+
+**Runs remember their ancestry, without being told.** Load an earlier run's
+result through `sillonlab` and log a new run, and the link is recorded for you,
+naming what passed between them. No `inherit=` to remember.
+
+**Figures and analyses remember their data.** `log_figure(fig, used=["coef"])`
+and `add_analysis("spectrum", data, used=["field"])` record what produced them:
 
 ```text
-fit  ← built from: coef, degree
+fit       ← built from: coef, degree
+spectrum  ← computed from: field
 ```
 
-**Runs remember their ancestry.** `track_run(inherit="baseline")` records a
-lineage edge you can walk with `sillon lineage`, `run.parents()` and
-`run.children()`.
+**Diffs tell you whether a comparison was fair.** `sillon diff a b` reports
+parameters with a real delta, whether the code differed in logic or only in a
+tuned constant, and whether results moved — arrays by shape, dtype and hash,
+never element by element.
 
 **Files remember their run.** Everything is content-hashed, so
 `sillon whose figures/fit.png` tells you which run produced a file you found.
@@ -110,7 +122,7 @@ start, and heavy arrays offloaded without you thinking about it.
 | [Core concepts](docs/getting-started/concepts.md) | the mental model — read once |
 | [Logging runs](docs/guide/logging.md) | the whole logging API |
 | [Querying and analysis](docs/guide/analysis.md) | working with many runs |
-| [Provenance and lineage](docs/guide/provenance.md) | figures, ancestry, hashes |
+| [Provenance and lineage](docs/guide/provenance.md) | code versions, automatic lineage, figures, hashes |
 | [CLI reference](docs/reference/cli.md) | every command |
 | [Troubleshooting](docs/guide/troubleshooting.md) | when something breaks |
 

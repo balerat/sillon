@@ -13,6 +13,7 @@ from silloncore.engine import (
     compare as engine_compare,
     diff as engine_diff,
     diff_across_runs as engine_diff_across,
+    find_similar_runs as engine_find_similar,
 )
 
 from sillonlab.display import print_context
@@ -385,6 +386,33 @@ class Project:
             dict: `{"run_count", "varying", "constant", "logic_versions", "runs"}`.
         """
         return engine_diff_across(self.engine, run_names, **query)
+
+    def like(self, run, limit: int = 10) -> list:
+        """The runs most similar to this one, by shared configuration.
+
+        "Did I do something close to this?" — more useful than an exact-match
+        check, which only fires on a perfect repeat and tells you nothing about
+        the near misses.
+
+        Example:
+            ```python
+            for match in project.like("happy_perlman"):
+                print(f"{match['score']:.0%}", match["name"], match["changes"])
+            ```
+
+        Args:
+            run (str | Run): The run to compare against.
+            limit (int): How many matches to return.
+
+        Raises:
+            LookupError: If the run cannot be found.
+
+        Returns:
+            list[dict]: `{"name", "uuid", "score", "differing", "changes",
+                "same_code"}`, best match first.
+        """
+        name = run.name if isinstance(run, Run) else run
+        return engine_find_similar(self.engine, name, limit)["matches"]
 
     # ---------------------------------------------------------
     # Container protocol
