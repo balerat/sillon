@@ -51,6 +51,8 @@ nav:
   - Guide:
       - Logging runs: guide/logging.md
       - Querying and analysis: guide/analysis.md
+      - Code versions: guide/code-versions.md
+      - Recipes: guide/recipes.md
       - Working with projects: guide/projects.md
       - Provenance and lineage: guide/provenance.md
       - Troubleshooting: guide/troubleshooting.md

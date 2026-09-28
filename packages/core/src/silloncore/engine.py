@@ -1089,6 +1089,10 @@ def export_run_report(engine, storage_root, snapshot: dict, dest=None, with_data
 
     report = build_run_report(engine, storage_root, snapshot)
     dest = Path(dest or f"{snapshot['name']}_report.zip")
+    # `--dest out/` means "put it in there", the way it does for `grab`. Without
+    # this, naming a directory tried to write the zip *as* that directory.
+    if dest.is_dir() or str(dest).endswith(("/", "\\")):
+        dest = dest / f"{snapshot['name']}_report.zip"
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as bundle:

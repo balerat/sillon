@@ -232,7 +232,9 @@ sillon rename old_name new_name
 
 ## Deleting
 
-Both commands prompt before doing anything. `-y` skips the prompt.
+`delete` always prompts. `prune` prompts only for `--delete-metadata`, because
+that is the irreversible half — a data-only prune leaves the record intact and
+can be re-created by re-running. `-y` skips either prompt.
 
 ### `sillon delete` — remove runs
 

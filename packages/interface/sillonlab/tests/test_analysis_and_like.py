@@ -184,3 +184,39 @@ def test_similarity_is_symmetric_and_bounded():
     assert 0.0 <= similarity(a, b)["score"] <= 1.0
     assert similarity({}, {})["score"] == 1.0
     assert similarity({"x": 1}, {"x": 1})["score"] == 1.0
+
+
+# ==========================================
+#              REPORT BUNDLES
+# ==========================================
+
+
+def test_report_dest_can_be_a_directory(project, tmp_path):
+    """`--dest out/` must mean "put it in there", as it does for grab.
+
+    Naming a directory used to raise IsADirectoryError, because the path was
+    treated as the zip's filename.
+    """
+    out = tmp_path / "bundles"
+    out.mkdir()
+
+    written = project.get("d1_r0.0").report(out)
+    assert written.is_file()
+    assert written.parent == out
+    assert written.name.endswith(".zip")
+
+
+def test_report_dest_can_still_be_a_filename(project, tmp_path):
+    written = project.get("d1_r0.0").report(tmp_path / "custom.zip")
+    assert written.name == "custom.zip"
+    assert written.is_file()
+
+
+def test_report_bundle_is_self_contained(project, tmp_path):
+    import zipfile
+
+    written = project.get("d1_r0.0").report(tmp_path / "b.zip", with_data=True)
+    names = zipfile.ZipFile(written).namelist()
+    assert "manifest.json" in names
+    assert "report.md" in names
+    assert "data.hdf5" in names, "with_data=True must embed the results"

@@ -135,6 +135,129 @@ recording a dangling edge.
 
 ## Code versions
 
+Every run records a hash of the code that produced it — the entry script **and**
+your own imported modules — computed so that a tuned constant does not read as a
+change but a changed expression does.
+
+```bash
+$ sillon versions
+  2 code versions across this project
+
+  Version    Runs   First seen   Last seen   Constants   Covers
+  f10236bb     72   Aug 02       Aug 24          3       all code
+  744e82d9     63   Aug 25       Sep 28          —       all code
+```
+
+That is what lets you answer *"which of my runs used the code from before I
+fixed that bug?"* — see **[Code versions](code-versions.md)** for the full
+guide.
+
+## Which data produced this analysis?
+
+The same idea as figures, for the quantities you derive after the fact:
+
+```python
+spectrum = np.fft.rfft(run.load_result("field"))
+run.add_analysis("spectrum", spectrum, used=["field"])
+```
+
+```bash
+$ sillon show my_run -A
+  spectrum   ← computed from: field
+```
+
+Omit `used=` and sillon fills it in from what you actually loaded from that run
+in this session, which is usually exactly right:
+
+```python
+data = run.load_result("field") * run.load_result("energy")
+run.add_analysis("scaled", data)          # used = ["energy", "field"]
+```
+
+Passing `used=` explicitly always wins over the inferred value.
+
+## Which run derives from which?
+
+Usually you do not have to say. If your script loads an earlier run's data
+through sillonlab and then logs a new run, sillon saw that happen and records
+the link itself:
+
+```python
+import sillonlab as sl, sillonpy as sp
+
+prev  = sl.load_project().get("equilibrated")
+state = prev.load_result("final_state")        # ← sillon notices this
+
+with sp.track_run(project_name="dynamics"):
+    sp.log_result("trajectory", evolve(state))
+    # parent edge to `equilibrated` recorded, naming `final_state`
+```
+
+No annotation, no discipline required. The edge records **which items** you read,
+so you can see not just *that* one run fed another but *what* passed between them.
+
+### What counts as deriving
+
+Only loading a run's **data** — `load_result`, `load_parameter`, `load_analysis`,
+`load_artifact`, `load_figure`. Browsing does not: listing runs, reading
+`.parameters`, calling `.show()` or `to_dataframe()` records nothing, because
+looking at a run is not deriving from it.
+
+In a long exploratory session where earlier reads should not attach themselves
+to the next run you log:
+
+```python
+sl.pending_reads()    # what would be recorded right now
+sl.forget_reads()     # start the provenance clean
+```
+
+!!! warning "Same process only"
+    The link is made by watching one process do both halves. Load data in a
+    notebook, write it to a file, then run a separate script, and there is no
+    edge — nothing observed the connection. Use `inherit=` when the two halves
+    genuinely happen in different processes.
+
+### Declaring it explicitly
+
+```python
+with sp.track_run(run_name="refined", inherit="baseline"):
+    sp.log_param("degree", 3)
+```
+
+`inherit` takes a run name, a uuid, or a `sillonlab.Run`. **Nothing is copied** —
+it records an edge. The child logs its own parameters; the link lets you walk
+back.
+
+Edges carry a `relation` so the two kinds stay distinguishable: `derived-from`
+for something you declared, `read` for something sillon inferred. Declaring a
+run you also read gives one merged edge, not two.
+
+```bash
+sillon lineage refined
+```
+
+```text
+╭─ lineage · refined ─╮
+│  run  refined       │
+│                     │
+│  Inherited from     │
+│    ↑ baseline       │
+│  Used by            │
+│    (none)           │
+╰─────────────────────╯
+```
+
+```python
+run.parent_links()       # [{'uuid': ..., 'name': 'baseline'}]
+run.parents()            # a RunCollection
+run.children()           # runs that inherited from this one
+```
+
+The parent must already exist; `inherit` raises if it does not, rather than
+recording a dangling edge.
+
+## Code versions
+
 The question this answers: *"I fixed a sign error in September — which of my 135
 runs used the fixed code?"*
 
