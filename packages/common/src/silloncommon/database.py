@@ -16,7 +16,7 @@ from sqlmodel import (
 from sqlalchemy import Column, event
 from sqlalchemy.types import JSON
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm.attributes import flag_modified
 
 if TYPE_CHECKING:
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 # ==========================================
 
 from silloncommon import __version__ as sillon_VERSION
+from silloncommon import timestamps
 
 
 def _configure_sqlite_connection(dbapi_connection, _connection_record):
@@ -61,12 +62,118 @@ def make_engine(db_path) -> Engine:
     return engine
 
 
+# Bumped when the schema gains something a reader needs. Stored in the file
+# header via `PRAGMA user_version`, so it costs no table and no ORM model.
+#   0  legacy — anything written before the pragma was set
+#   1  the 2.0 schema (parents, logic_version, figure and analysis tables)
+#   2  started_at, and a unique index on uuid
+SCHEMA_VERSION = 2
+
+# One run must not appear twice. uuid is client-side uuid4, so a collision is
+# not the worry — importing the same run twice is. Readers take `.first()`, so
+# a duplicate becomes an invisible shadow row that the index and query paths
+# nonetheless count. Named apart from `ix_simulationtable_uuid` because that
+# one already exists non-unique in every project, and `checkfirst` matches on
+# the name, so reusing it would silently skip the uniqueness.
+UUID_UNIQUE_INDEX = "ix_simulationtable_uuid_unique"
+
+
+def schema_version(engine: Engine) -> int:
+    """The schema version recorded in a database file, or 0 if none is."""
+    try:
+        with engine.connect() as conn:
+            return int(conn.exec_driver_sql("PRAGMA user_version").scalar() or 0)
+    except (OperationalError, TypeError, ValueError):
+        return 0
+
+
+def _add_missing_columns(conn) -> None:
+    """ALTER in any column the ORM declares and the file lacks.
+
+    Covers all four tables. It used to cover `simulationtable` only, so a
+    column added to artifacts, figures or analyses was never backfilled into an
+    existing project — `create_all` skips a table that is already there.
+    """
+    for table in SQLModel.metadata.tables.values():
+        rows = list(conn.exec_driver_sql(f"PRAGMA table_info({table.name})"))
+        if not rows:
+            continue  # create_all() just made it, so it is current
+        existing = {row[1] for row in rows}
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            coltype = "JSON" if isinstance(col.type, JSON) else "TEXT"
+            conn.exec_driver_sql(
+                f"ALTER TABLE {table.name} ADD COLUMN {col.name} {coltype}"
+            )
+
+
+def _create_indexes(engine: Engine) -> None:
+    """Create every declared index, plus the uuid uniqueness guard.
+
+    `create_all()` skips a table that already exists and skips its indexes with
+    it, so an existing project never picks up a newly declared index unless it
+    is created explicitly.
+
+    Each index gets its own transaction: the unique one fails on a database
+    that already holds duplicate uuids, and that must not take the others down
+    with it. `sillon check` is where those duplicates get reported.
+    """
+    for table in SQLModel.metadata.tables.values():
+        for index in table.indexes:
+            try:
+                with engine.begin() as conn:
+                    index.create(bind=conn, checkfirst=True)
+            except (OperationalError, IntegrityError):
+                pass
+
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {UUID_UNIQUE_INDEX} "
+                "ON simulationtable (uuid)"
+            )
+    except (OperationalError, IntegrityError):
+        pass
+
+
+def _backfill_started_at(conn) -> None:
+    """Give older runs an offset-aware timestamp derived from their `date`.
+
+    The offset used is the one this machine had *on that date*, so a summer run
+    keeps its summer offset. That is a guess — the run may have been logged
+    elsewhere — but it is the only information the row carries, and it is right
+    for the overwhelmingly common case of a project that has only ever lived
+    here. Runs imported from another machine arrive with a real `started_at`.
+    """
+    probe = conn.exec_driver_sql(
+        "SELECT 1 FROM simulationtable WHERE started_at IS NULL LIMIT 1"
+    ).first()
+    if probe is None:
+        return
+
+    rows = conn.exec_driver_sql(
+        "SELECT id, date FROM simulationtable WHERE started_at IS NULL"
+    ).fetchall()
+    for row_id, date_str in rows:
+        moment = timestamps.to_aware(date_str)
+        if moment is None:
+            continue
+        conn.exec_driver_sql(
+            "UPDATE simulationtable SET started_at = ? WHERE id = ?",
+            (moment.isoformat(timespec="seconds"), row_id),
+        )
+
+
 def migrate_schema(engine: Engine) -> Engine:
     """Brings an existing database up to the current schema, idempotently.
 
-    Creates any missing tables and adds any columns present on the ORM models
-    but missing from an older `simulationtable` (e.g. `parents`), so databases
-    created by earlier versions keep working without a manual migration.
+    Creates missing tables, adds any column the ORM declares and the file
+    lacks, creates the declared indexes, backfills `started_at`, and records
+    the schema version so a reader can tell what it is looking at.
+
+    Best-effort throughout: a database that cannot be migrated — read-only
+    media, a pre-existing duplicate blocking an index — must still open.
 
     Args:
         engine (Engine): The SQLAlchemy engine to migrate.
@@ -75,28 +182,30 @@ def migrate_schema(engine: Engine) -> Engine:
         Engine: The same engine (for chaining).
     """
     SQLModel.metadata.create_all(engine)
+
     try:
         with engine.begin() as conn:
-            existing = {
-                row[1]
-                for row in conn.exec_driver_sql("PRAGMA table_info(simulationtable)")
-            }
-            if existing:  # table exists (older DB) — add any missing columns
-                for col in SimulationTable.__table__.columns:
-                    if col.name not in existing:
-                        coltype = "JSON" if isinstance(col.type, JSON) else "TEXT"
-                        conn.exec_driver_sql(
-                            f"ALTER TABLE simulationtable ADD COLUMN {col.name} {coltype}"
-                        )
-
-            # create_all() skips a table that already exists, and skips its
-            # indexes with it — so an existing project never picks up a newly
-            # declared index unless we create it explicitly.
-            for table in SQLModel.metadata.tables.values():
-                for index in table.indexes:
-                    index.create(bind=conn, checkfirst=True)
+            _add_missing_columns(conn)
     except OperationalError:
-        pass  # best-effort; a brand-new DB is already fully created above
+        pass
+
+    _create_indexes(engine)
+
+    try:
+        with engine.begin() as conn:
+            _backfill_started_at(conn)
+    except OperationalError:
+        pass
+
+    # Never downgrade the marker: a file written by a newer sillon keeps its
+    # version, so that sillon can still tell this one touched it.
+    try:
+        if schema_version(engine) < SCHEMA_VERSION:
+            with engine.begin() as conn:
+                conn.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    except OperationalError:
+        pass
+
     return engine
 
 
@@ -173,6 +282,11 @@ class SimulationTable(SQLModel, table=True):
     uuid: str = Field(index=True)
     name: str = Field(index=True)
     date: Optional[str] = Field(default=None, index=True)
+    # The same instant as `date`, but ISO-8601 with an offset. `date` is naive
+    # local time, which sorts correctly only within one machine: merge two and
+    # a 14:00 in Paris sorts after a 13:00 in Boston that happened four hours
+    # later. `date` stays as the thing people read; this is what orders them.
+    started_at: Optional[str] = Field(default=None, index=True)
 
     # JSON Data Columns
     parameters: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
@@ -432,6 +546,7 @@ def insert_simulation(run: "Simulation", session: Session) -> SimulationTable:
         uuid=run.run_id,
         name=run.run_name,
         date=run.date,
+        started_at=getattr(run, "started_at", None),
         parameters=run.parameters,
         results=clean_results,
         meta_data=run.metadata,
@@ -446,7 +561,10 @@ def insert_simulation(run: "Simulation", session: Session) -> SimulationTable:
         hashes=asdict(run.hashes),
         organisation=run.organisation,
         project=run.project_name,
-        sillonversion=sillon_VERSION,
+        # The version that produced the run. An import must carry the original
+        # rather than restamping with the importing machine's, or the record of
+        # which sillon actually wrote the run is destroyed.
+        sillonversion=getattr(run, "sillonversion", None) or sillon_VERSION,
         status=run.status,
         logic_version=getattr(run, "logic_version", None),
         runtime=run.runtime,
@@ -1058,6 +1176,11 @@ def select_run_index(engine: Engine) -> List[Dict[str, Any]]:
                     "uuid": run.uuid,
                     "name": run.name,
                     "date": run.date,
+                    "started_at": run.started_at,
+                    # Chronological and timezone-correct, unlike `date`, which
+                    # is naive local time. Precomputed here because every
+                    # caller that sorts or bounds by time wants the same key.
+                    "when": timestamps.sort_key(run.date, run.started_at),
                     "status": run.status,
                     "logic_version": run.logic_version,
                     "author": run.author,
@@ -1091,7 +1214,8 @@ def select_run_identities(engine: Engine) -> List[Dict[str, Any]]:
         engine (Engine): The SQLAlchemy engine.
 
     Returns:
-        List[dict]: One `{id, name, uuid, date}` per run.
+        List[dict]: One `{id, name, uuid, date, started_at, when}` per run,
+            where `when` is the timezone-correct sort key.
     """
     with Session(engine) as session:
         rows = session.exec(
@@ -1100,11 +1224,19 @@ def select_run_identities(engine: Engine) -> List[Dict[str, Any]]:
                 SimulationTable.name,
                 SimulationTable.uuid,
                 SimulationTable.date,
+                SimulationTable.started_at,
             )
         ).all()
     return [
-        {"id": run_id, "name": name, "uuid": uuid, "date": date}
-        for run_id, name, uuid, date in rows
+        {
+            "id": run_id,
+            "name": name,
+            "uuid": uuid,
+            "date": date,
+            "started_at": started_at,
+            "when": timestamps.sort_key(date, started_at),
+        }
+        for run_id, name, uuid, date, started_at in rows
     ]
 
 

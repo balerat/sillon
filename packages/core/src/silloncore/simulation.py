@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from datetime import datetime
+
+from silloncommon import timestamps
 from pathlib import Path
 
 from names_generator import generate_name
@@ -295,8 +297,12 @@ class Simulation:
             self.run_name = generate_name() 
 
     def set_date(self):
-        """Sets the creation date of the run based on the current system time."""
-        self.date = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        """Stamps the run with the current time, in both stored forms.
+
+        `date` is the naive local string everything displays; `started_at`
+        carries the offset, so runs from two machines can be ordered.
+        """
+        self.date, self.started_at = timestamps.now_pair()
 
     # ---------------------------------------------------------
     # Saving functions

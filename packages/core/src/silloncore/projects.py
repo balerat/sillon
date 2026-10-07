@@ -29,10 +29,12 @@ def _project_stats(project_path) -> dict:
     except Exception:
         return {"run_count": None, "last_activity": None, "readable": False}
 
-    dates = [entry["date"] for entry in index if entry.get("date")]
+    # Keyed on `when` (timezone-correct) but reported as `date`, which is the
+    # string the projects table displays.
+    dated = [(entry.get("when") or "", entry["date"]) for entry in index if entry.get("date")]
     return {
         "run_count": len(index),
-        "last_activity": max(dates) if dates else None,
+        "last_activity": max(dated)[1] if dated else None,
         "readable": True,
     }
 

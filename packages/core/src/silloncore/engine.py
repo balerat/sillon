@@ -2,6 +2,7 @@ from os import sysconf_names
 import shutil
 from pathlib import Path
 
+from silloncommon import timestamps
 from silloncommon.database import (
     select_param_user,
     select_metadata_user,
@@ -58,7 +59,9 @@ def get_project_context(engine, run_names: list = None) -> dict:
             ```
     """
     index = select_run_index(engine)
-    index.sort(key=lambda entry: entry["date"] or "")  # by timestamp
+    # Chronological across machines: `date` is naive local time, so a merged
+    # project cannot be ordered by it. `when` is the UTC-normalised key.
+    index.sort(key=lambda entry: entry.get("when") or "")
 
     def _to_card(entry: dict) -> dict:
         assets = (
@@ -436,18 +439,18 @@ def _meta_has(meta: dict, name: str) -> bool:
 
 
 def _to_datetime(value):
-    """Coerces a datetime or `YYYY-MM-DD[-HH:MM:SS]` string to a datetime, or None."""
-    from datetime import datetime
+    """Coerces a date bound to an offset-aware datetime, or None.
 
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        for fmt in ("%Y-%m-%d-%H:%M:%S", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(value, fmt)
-            except ValueError:
-                continue
-    return None
+    Accepts a datetime, a full stamp, an ISO-8601 string or a bare
+    `YYYY-MM-DD`. A naive value is read as local time, which is what someone
+    typing `--after 2026-01-01` means.
+    """
+    return timestamps.parse_bound(value)
+
+
+def _run_moment(entry: dict):
+    """When a run started, as an aware datetime, or None."""
+    return timestamps.to_aware(entry.get("date"), entry.get("started_at"))
 
 
 def _searchable_columns(entry: dict) -> dict:
@@ -526,7 +529,7 @@ def match_cheap(
 
     # --- date range ---
     if before is not None or after is not None:
-        run_dt = _to_datetime(entry.get("date"))
+        run_dt = _run_moment(entry)
         if run_dt is None:
             return False
         if before is not None and not run_dt < _to_datetime(before):
@@ -1153,15 +1156,21 @@ def prune_runs(
 
     storage_root = Path(storage_root)
     selectors = set(run_names or [])
+    # Normalised once, and defensively: run moments are offset-aware, so a
+    # naive cutoff would raise on comparison rather than select the wrong
+    # runs -- but this is the one operation that cannot be undone, so it
+    # accepts a datetime or a string and makes both unambiguous.
+    cutoff = _to_datetime(before) if before is not None else None
+    if before is not None and cutoff is None:
+        return {"status": "error", "message": f"Could not read the date '{before}'."}
+
     targets = []
     for run in select_run_identities(engine):
         selected = run["name"] in selectors or run["uuid"] in selectors
-        if before is not None and run["date"]:
-            try:
-                if datetime.strptime(run["date"], "%Y-%m-%d-%H:%M:%S") < before:
-                    selected = True
-            except ValueError:
-                pass
+        if cutoff is not None and run["date"]:
+            moment = _run_moment(run)
+            if moment is not None and moment < cutoff:
+                selected = True
         if selected:
             targets.append(run)
 
@@ -1409,7 +1418,7 @@ def get_code_versions(engine) -> list:
         )
         group["runs"].append(entry["name"])
         if entry.get("date"):
-            group["dates"].append(entry["date"])
+            group["dates"].append((entry.get("when") or "", entry["date"]))
         group["variants"].add(_constant_variant_key(entry))
         recorded = (entry.get("meta_data") or {}).get("sillon.code.version") or {}
         if recorded.get("partial"):
@@ -1419,14 +1428,17 @@ def get_code_versions(engine) -> list:
 
     out = []
     for group in groups.values():
-        dates = sorted(d for d in group["dates"] if d)
+        # Each entry is (sort key, display date); order by the first, report
+        # the second.
+        dates = sorted(d for d in group["dates"] if d[1])
         out.append(
             {
                 "logic_version": group["logic_version"],
                 "run_count": len(group["runs"]),
                 "runs": group["runs"],
-                "first_seen": dates[0] if dates else None,
-                "last_seen": dates[-1] if dates else None,
+                "first_seen": dates[0][1] if dates else None,
+                "last_seen": dates[-1][1] if dates else None,
+                "_last_key": dates[-1][0] if dates else "",
                 "constant_variants": len([v for v in group["variants"] if v]),
                 "files": group["files"],
                 # Recovered from a run logged before versioning existed: the
@@ -1435,7 +1447,9 @@ def get_code_versions(engine) -> list:
             }
         )
 
-    out.sort(key=lambda g: (g["last_seen"] or "", g["run_count"]), reverse=True)
+    out.sort(key=lambda g: (g["_last_key"], g["run_count"]), reverse=True)
+    for group in out:
+        del group["_last_key"]
     return out
 
 
@@ -1646,7 +1660,11 @@ def get_project_summary(engine, storage_root, project_path) -> dict:
     counts = {}
     for entry in index:
         counts[entry.get("status") or "UNKNOWN"] = counts.get(entry.get("status") or "UNKNOWN", 0) + 1
-    dates = sorted(e["date"] for e in index if e.get("date"))
+    # Sorted on the timezone-correct key, but the *display* string is still
+    # `date` -- that is what the landing view shows.
+    dated = sorted(
+        ((e.get("when") or "", e.get("date")) for e in index if e.get("date")),
+    )
 
     groups = get_code_versions(engine)
     named = [g for g in groups if g["logic_version"]]
@@ -1671,7 +1689,7 @@ def get_project_summary(engine, storage_root, project_path) -> dict:
         "name": resolve_project_name(project_path),
         "path": str(project_path),
         "run_count": len(index),
-        "last_activity": dates[-1] if dates else None,
+        "last_activity": dated[-1][1] if dated else None,
         "status_counts": counts,
         "versions": len(named),
         "current_version": named[0]["logic_version"] if named else None,

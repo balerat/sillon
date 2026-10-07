@@ -35,10 +35,14 @@ def add_parser(command_subparser):
 
 
 def _parse_age(raw: str):
-    """Parses '30d' (days ago) or 'YYYY-MM-DD' into a cutoff datetime."""
+    """Parses '30d' (days ago) or 'YYYY-MM-DD' into a cutoff datetime.
+
+    Offset-aware, because a run's start is: comparing the two would otherwise
+    raise, and `prune` is the operation that cannot be undone.
+    """
     if raw.endswith("d") and raw[:-1].isdigit():
-        return datetime.now() - timedelta(days=int(raw[:-1]))
-    return datetime.strptime(raw, "%Y-%m-%d")
+        return datetime.now().astimezone() - timedelta(days=int(raw[:-1]))
+    return datetime.strptime(raw, "%Y-%m-%d").astimezone()
 
 
 def command(engine, storage_root, args):
