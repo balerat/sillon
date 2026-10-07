@@ -54,6 +54,7 @@ nav:
       - Code versions: guide/code-versions.md
       - Recipes: guide/recipes.md
       - Working with projects: guide/projects.md
+      - Moving runs between machines: guide/transfer.md
       - Provenance and lineage: guide/provenance.md
       - Troubleshooting: guide/troubleshooting.md
       - Migrating to 2.0: guide/migrating-to-2.0.md

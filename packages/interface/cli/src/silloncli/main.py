@@ -20,6 +20,8 @@ import silloncli.commands.projects as projects
 import silloncli.commands.versions as versions
 import silloncli.commands.diff as diff
 import silloncli.commands.like as like
+import silloncli.commands.export as export
+import silloncli.commands.import_cmd as import_cmd
 
 from silloncommon import __version__
 
@@ -44,6 +46,8 @@ COMMAND_LIST = {
     "versions": versions,
     "diff": diff,
     "like": like,
+    "export": export,
+    "import": import_cmd,
 }
 
 

@@ -581,6 +581,71 @@ def insert_simulation(run: "Simulation", session: Session) -> SimulationTable:
     return table
 
 
+# The columns a run row owns. `id` is excluded on purpose: it is a machine-local
+# autoincrement rowid and the child tables point at it, so an imported run must
+# be given a fresh one rather than carrying the one it had elsewhere.
+_RUN_COLUMNS = tuple(
+    col.name for col in SimulationTable.__table__.columns if col.name != "id"
+)
+
+
+def insert_imported_run(
+    record: Dict[str, Any], session: Session, name: str = None
+) -> SimulationTable:
+    """Inserts a run that was produced somewhere else, as it was.
+
+    The sibling of `insert_simulation`, which is duck-typed on a live
+    `Simulation` and therefore cannot be used here: `Simulation.__init__`
+    stamps `date = now()` and mints a name, so a run inserted through it loses
+    the identity it is supposed to be keeping.
+
+    Everything the row carried is preserved -- uuid, both timestamps, status,
+    runtime, hostname, author and the sillon version that wrote it -- except
+    the integer primary keys, which are machine-local. Child rows are attached
+    through the relationship, so SQLAlchemy assigns each a fresh `run_id` on
+    commit, exactly as it does for a freshly logged run.
+
+    Unknown keys in `record` are ignored rather than raising, so a bundle
+    written by a newer sillon imports its fields that this one understands and
+    says so, instead of refusing outright.
+
+    Args:
+        record (dict): `{"run": {...}, "artifacts": [...], "figures": [...],
+            "analyses": [...]}`, as `select_run_snapshot` produces it.
+        session (Session): The active session. Not committed here -- the caller
+            owns the transaction, so a whole import succeeds or fails together.
+        name (str, optional): A replacement name, for when the original
+            collides with a local run. Defaults to the recorded name.
+
+    Returns:
+        SimulationTable: The pending row, added to the session.
+    """
+    run = dict(record.get("run") or {})
+    fields = {key: run.get(key) for key in _RUN_COLUMNS if key in run}
+    if name is not None:
+        fields["name"] = name
+
+    def _children(table, rows):
+        out = []
+        for row in rows or []:
+            payload = {
+                col.name: row.get(col.name)
+                for col in table.__table__.columns
+                if col.name in row and col.name not in ("id", "run_id")
+            }
+            out.append(table(**payload))
+        return out
+
+    table = SimulationTable(
+        **fields,
+        artifacts=_children(ArtifactTable, record.get("artifacts")),
+        figures=_children(FigureTable, record.get("figures")),
+        analyses=_children(AnalysisTable, record.get("analyses")),
+    )
+    session.add(table)
+    return table
+
+
 # ==========================================
 #       DATA STRUCTURES & PARSERS
 # ==========================================
@@ -1125,10 +1190,14 @@ def select_metadata_all(engine: Engine) -> Sequence[Any]:
         return session.exec(select(SimulationTable.meta_data)).all()
 
 
-def select_uuids(engine: Engine) -> Sequence[Any]:
-    """Extracts every UUID currently tracked in the database."""
+def select_uuids(engine: Engine) -> set:
+    """Every run uuid in the database.
+
+    Also the set an import dedups against: a uuid already here means that run
+    is already here, so importing it again is a no-op rather than a duplicate.
+    """
     with Session(engine) as session:
-        return session.exec(select(SimulationTable.uuid)).all()
+        return set(session.exec(select(SimulationTable.uuid)).all())
 
 
 def select_run_index(engine: Engine) -> List[Dict[str, Any]]:
@@ -1278,12 +1347,39 @@ def db_delete_runs(engine: Engine, identifiers: List[str]) -> List[str]:
     return deleted
 
 
+def resolve_available_name(name: str, existing) -> str:
+    """The first free name in the series `name`, `name_2`, `name_3`, ...
+
+    The pure half of `next_available_name`, so a caller holding many names to
+    place — an import — can fetch the taken set once instead of querying per
+    run.
+
+    Args:
+        name (str): The desired base name.
+        existing (set[str]): Names already taken.
+
+    Returns:
+        str: A name not in `existing`.
+    """
+    if name not in existing:
+        return name
+    index = 2
+    while f"{name}_{index}" in existing:
+        index += 1
+    return f"{name}_{index}"
+
+
+def select_names(engine: Engine) -> set:
+    """Every run name in the database."""
+    with Session(engine) as session:
+        return set(session.exec(select(SimulationTable.name)).all())
+
+
 def next_available_name(engine: Engine, name: str, taken: Sequence[str] = ()) -> str:
     """Returns a unique run name, appending an increment on collision.
 
     A name is considered taken if it already exists in the database or appears
-    in `taken` (in-flight runs not yet committed). The first free name in the
-    series `name`, `name_2`, `name_3`, ... is returned.
+    in `taken` (in-flight runs not yet committed).
 
     Args:
         engine (Engine): The SQLAlchemy engine.
@@ -1294,17 +1390,7 @@ def next_available_name(engine: Engine, name: str, taken: Sequence[str] = ()) ->
     Returns:
         str: A run name guaranteed not to collide with existing or in-flight runs.
     """
-    with Session(engine) as session:
-        existing = set(session.exec(select(SimulationTable.name)).all())
-    existing.update(taken)
-
-    if name not in existing:
-        return name
-
-    index = 2
-    while f"{name}_{index}" in existing:
-        index += 1
-    return f"{name}_{index}"
+    return resolve_available_name(name, select_names(engine) | set(taken))
 
 
 # ==========================================

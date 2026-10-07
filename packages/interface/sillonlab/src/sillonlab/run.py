@@ -79,13 +79,19 @@ class Run:
 
         context = context or {}
         self.uuid = uuid or context.get("uuid")
-        self.name = name
+        self._name = name
         self.timestamp = context.get("timestamp")
         self.status = context.get("status")
 
         if self.uuid is None and name is None:
             raise ValueError("A Run needs a name or a uuid.")
 
+        # When the handle was built from a uuid, any name we were handed is a
+        # label from elsewhere -- a lineage edge carries the name the parent
+        # had on the machine where the link was made, which an import may have
+        # had to change. So it is a hint for error messages, not the name, and
+        # `.name` resolves it on first read.
+        self._name_is_authoritative = uuid is None or name is None
         self._snapshot = None
 
     # ---------------------------------------------------------
@@ -101,11 +107,29 @@ class Run:
             if snapshot is None:
                 raise LookupError(self._missing_message())
             self._snapshot = snapshot
-            self.name = snapshot["name"]
+            self._name = snapshot["name"]
+            self._name_is_authoritative = True
             self.uuid = snapshot["uuid"]
             self.timestamp = snapshot["date"]
             self.status = snapshot["status"]
         return self._snapshot
+
+    @property
+    def name(self) -> str:
+        """The run's name in *this* project.
+
+        Reading it loads the snapshot when the handle was built from a uuid,
+        because until then the only name available came from somewhere else
+        and may belong to a different run locally.
+        """
+        if not self._name_is_authoritative and self._snapshot is None:
+            self._load_snapshot()
+        return self._name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self._name = value
+        self._name_is_authoritative = True
 
     def _missing_message(self) -> str:
         """Why a lookup failed — naming both halves of the identity.
@@ -114,14 +138,14 @@ class Run:
         was never imported, and saying only the name makes that look like a
         typo. `sillon check` lists these.
         """
-        if self.uuid and self.name:
+        if self.uuid and self._name:
             return (
-                f"Run '{self.name}' ({self.uuid}) is not in this project. "
+                f"Run '{self._name}' ({self.uuid}) is not in this project. "
                 "A lineage edge can point at a run that was never imported."
             )
         if self.uuid:
             return f"No run with uuid '{self.uuid}' in this project."
-        return f"Run '{self.name}' not found in the project database."
+        return f"Run '{self._name}' not found in the project database."
 
     # ---------------------------------------------------------
     # Tracked data as properties

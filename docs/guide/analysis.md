@@ -196,13 +196,21 @@ Ranked by shared configuration, with a tiebreak on how far the differing values
 moved. `same_code` on each match tells you whether the two runs were produced by
 the same code version.
 
-## Exporting
+## Getting data out
 
 ```python
-run.export("out/", format="npz")     # npz, npy or hdf5
-run.report("out/")                   # a self-contained bundle
+run.export("out/", format="npz")     # the arrays: npz, npy or hdf5
+run.report("out/")                   # a write-up for a person to read
 run.manifest()                       # what the run holds
 run.sizes()                          # how much space it takes
+```
+
+To move runs to another machine rather than read them elsewhere, that is a
+bundle — see [Moving runs between machines](transfer.md).
+
+```python
+project.export(tags="sweep", dest="/Volumes/share/")
+project.import_bundle("sweep.sillon", dry_run=True)
 ```
 
 ## Comparing runs

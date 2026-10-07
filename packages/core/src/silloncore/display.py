@@ -17,6 +17,8 @@ free of any rich dependency.
 from datetime import datetime
 from pathlib import Path
 
+from silloncommon import timestamps
+
 from rich.box import SIMPLE, SIMPLE_HEAVY
 from rich.columns import Columns
 from rich.console import Console, Group
@@ -132,16 +134,19 @@ def _array_repr(dtype, shape) -> str:
 
 
 def relative_time(date_str: str) -> str:
-    """A compact 'time ago' for the stored `%Y-%m-%d-%H:%M:%S` timestamp.
+    """A compact 'time ago' for either stored timestamp form.
+
+    Accepts the display `%Y-%m-%d-%H:%M:%S` and the offset-aware ISO-8601 of
+    `started_at` — a bundle's `created` is the latter, and printing that raw
+    was the one place a wall of digits showed up in the output.
 
     Falls back to the raw string if it cannot be parsed.
     """
-    try:
-        then = datetime.strptime(str(date_str), "%Y-%m-%d-%H:%M:%S")
-    except (ValueError, TypeError):
+    then = timestamps.to_aware(date_str, date_str if "T" in str(date_str) else None)
+    if then is None:
         return str(date_str)
 
-    seconds = (datetime.now() - then).total_seconds()
+    seconds = (datetime.now().astimezone() - then).total_seconds()
     if seconds < 0:
         return "just now"
     for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
@@ -374,6 +379,9 @@ __all__ = [
     "print_similar_runs",
     "print_landing",
     "print_landing_outside_project",
+    "print_export_result",
+    "print_import_plan",
+    "print_import_result",
     "Columns",
     "Group",
     "Text",
@@ -793,3 +801,173 @@ def print_landing_outside_project(version: str) -> None:
     console.print(
         themed_panel(Group(_logo_block(version), Text(""), body), title=None)
     )
+
+
+# --- transfer (export / import) ---------------------------------------------
+def print_export_result(result: dict) -> None:
+    """Prints a `silloncore.engine.export_bundle` payload."""
+    path = result["path"]
+    lines = [
+        Text.assemble(("  file     ", S_LABEL), (str(path), f"bold {c('foam')}")),
+        Text.assemble(
+            ("  holds    ", S_LABEL),
+            (f"{len(result['runs'])} run{'s' if len(result['runs']) != 1 else ''}", S_VALUE),
+            ("   ", ""),
+            (human_size(result["bytes"]), S_DIM),
+        ),
+    ]
+    if not result["with_data"]:
+        lines.append(
+            Text.assemble(
+                ("  note     ", S_LABEL),
+                ("index only — these runs import as stubs", f"italic {c('ember')}"),
+            )
+        )
+    for missing in result.get("skipped_data") or []:
+        lines.append(
+            Text.assemble(
+                ("  missing  ", S_LABEL),
+                (f"{short_id(missing['uuid'])} has no {missing['group']} on disk", "bold #E06C75"),
+            )
+        )
+    console.print(themed_panel(Group(*lines), title="Exported"))
+
+
+def _source_line(source: dict) -> Text:
+    """Where a bundle came from, in one line."""
+    return Text.assemble(
+        ("  from     ", S_LABEL),
+        (source.get("project_name") or "?", f"bold {c('foam')}"),
+        ("  on  ", S_DIM),
+        (source.get("hostname") or "?", S_VALUE),
+        ("   ", ""),
+        (relative_time(source.get("created") or "") if source.get("created") else "", S_DIM),
+    )
+
+
+def print_import_plan(result: dict) -> None:
+    """Prints what an import would do — the `--dry-run` and `--inspect` view."""
+    source = result["source"]
+    lines = [_source_line(source)]
+    lines.append(
+        Text.assemble(
+            ("  wrote by ", S_LABEL),
+            (f"sillon {source.get('sillon_version') or '?'}", S_DIM),
+            ("   ", ""),
+            ("with data" if source.get("has_data") else "index only",
+             S_DIM if source.get("has_data") else f"italic {c('ember')}"),
+        )
+    )
+
+    if result.get("inspect_only"):
+        lines.append(
+            Text.assemble(
+                ("  holds    ", S_LABEL),
+                (f"{source.get('run_count', 0)} runs", S_VALUE),
+            )
+        )
+        console.print(themed_panel(Group(*lines), title="Bundle"))
+        return
+
+    lines.append(Text(""))
+    new, here = result["new"], result["already_here"]
+    lines.append(
+        Text.assemble(
+            ("  new      ", S_LABEL),
+            (str(len(new)), f"bold {c('spray')}" if new else S_DIM),
+            ("   already here  ", S_DIM),
+            (str(len(here)), S_VALUE),
+        )
+    )
+
+    if new:
+        table = themed_table(padding=(0, 2), box=SIMPLE)
+        table.add_column("Run", style=f"bold {c('spray')}")
+        table.add_column("", style=S_DIM)
+        for entry in new[:20]:
+            renamed = entry["name"] != entry["original_name"]
+            table.add_row(
+                entry["name"],
+                f"was {entry['original_name']} — the name is taken here" if renamed else "",
+            )
+        lines.extend([Text(""), table])
+        if len(new) > 20:
+            lines.append(Text(f"  … and {len(new) - 20} more", style=S_DIM))
+
+    if result.get("stubs"):
+        lines.append(
+            Text.assemble(
+                ("\n  stubs    ", S_LABEL),
+                (f"{len(result['stubs'])} run(s) arrive without their data",
+                 f"italic {c('ember')}"),
+            )
+        )
+    for edge in (result.get("parents_missing") or [])[:5]:
+        lines.append(
+            Text.assemble(
+                ("  lineage  ", S_LABEL),
+                (f"{edge['run']}'s parent ", S_DIM),
+                (edge["parent_name"] or short_id(edge["parent_uuid"]), S_VALUE),
+                (" is in neither project", S_DIM),
+            )
+        )
+
+    console.print(themed_panel(Group(*lines), title="Would import"))
+
+
+def print_import_result(result: dict) -> None:
+    """Prints a completed `silloncore.engine.import_bundle` payload."""
+    lines = [_source_line(result["source"]), Text("")]
+
+    imported = result["imported"]
+    lines.append(
+        Text.assemble(
+            ("  added    ", S_LABEL),
+            (f"{imported} run{'s' if imported != 1 else ''}",
+             f"bold {c('foam')}" if imported else S_DIM),
+        )
+    )
+    if result["already_here"]:
+        lines.append(
+            Text.assemble(
+                ("  skipped  ", S_LABEL),
+                (f"{len(result['already_here'])} already here", S_DIM),
+            )
+        )
+    if result["files_copied"]:
+        lines.append(
+            Text.assemble(
+                ("  data     ", S_LABEL),
+                (f"{result['files_copied']} files", S_VALUE),
+                (f"   {result['sources_copied']} new source blob(s)", S_DIM),
+            )
+        )
+
+    for entry in result["renamed"]:
+        lines.append(
+            Text.assemble(
+                ("  renamed  ", S_LABEL),
+                (entry["from"], S_DIM),
+                (" → ", S_DIM),
+                (entry["to"], f"bold {c('spray')}"),
+            )
+        )
+    if result.get("stubs"):
+        lines.append(
+            Text.assemble(
+                ("  stubs    ", S_LABEL),
+                (f"{len(result['stubs'])} run(s) have no data — `sillon check` lists them",
+                 f"italic {c('ember')}"),
+            )
+        )
+    for edge in (result.get("parents_missing") or [])[:5]:
+        lines.append(
+            Text.assemble(
+                ("  lineage  ", S_LABEL),
+                (f"{edge['run']}'s parent ", S_DIM),
+                (edge["parent_name"] or short_id(edge["parent_uuid"]), S_VALUE),
+                (" was not imported — the edge is kept", S_DIM),
+            )
+        )
+
+    console.print(themed_panel(Group(*lines), title="Imported"))

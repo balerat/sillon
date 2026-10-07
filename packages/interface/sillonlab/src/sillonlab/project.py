@@ -20,6 +20,8 @@ from silloncore.engine import (
     diff as engine_diff,
     diff_across_runs as engine_diff_across,
     find_similar_runs as engine_find_similar,
+    export_bundle as engine_export,
+    import_bundle as engine_import,
 )
 
 from sillonlab.display import print_context
@@ -412,6 +414,75 @@ class Project:
         return engine_prune(
             self.engine, self.storage_root,
             run_names=run_names, before=before, keep_metadata=keep_metadata,
+        )
+
+    # ---------------------------------------------------------
+    # Moving runs between projects
+    # ---------------------------------------------------------
+
+    def export(self, run_names=None, dest=None, with_data: bool = True, **query) -> dict:
+        """Writes runs to a portable bundle another machine can import.
+
+        A different thing from `Run.report()`, which produces a zip for a
+        person to read and is lossy by design. A bundle is complete and is
+        meant to be read back by sillon.
+
+        Example:
+            ```python
+            project.export(tags="sweep", dest="/Volumes/share/")
+            project.export(["deg3"], dest="deg3.sillon")
+            ```
+
+        Args:
+            run_names (list[str], optional): Explicit runs. Omit to use every
+                run matching `query`, or the whole project when there is none.
+            dest (str | Path, optional): A file to write, or a directory to
+                write a self-describing name into.
+            with_data (bool): Include the heavy data. Defaults to True; False
+                writes an index-only bundle whose runs import as stubs.
+            **query: The same cheap filters as `query()` (`tags`, `before`, ...).
+
+        Returns:
+            dict: `{"path", "runs", "bytes", "with_data", "skipped_data"}`.
+        """
+        tags = query.pop("tags", None)
+        if tags is not None:
+            query["has_tag"] = _as_list(tags)
+        return engine_export(
+            self.engine,
+            self.storage_root,
+            self.path,
+            run_names=_as_list(run_names),
+            dest=dest,
+            with_data=with_data,
+            **query,
+        )
+
+    def import_bundle(self, path, with_data: bool = True, dry_run: bool = False) -> dict:
+        """Adds every run in a bundle that this project does not already have.
+
+        Union, never overwrite: a run already here is left alone, and an
+        incoming name that is taken gets suffixed with where it came from. Safe
+        to repeat — re-importing is how you find out whether a bundle has
+        anything new in it.
+
+        Example:
+            ```python
+            project.import_bundle("lattice~laptop.sillon", dry_run=True)
+            ```
+
+        Args:
+            path (str | Path): The bundle to read.
+            with_data (bool): Copy the heavy data. Defaults to True.
+            dry_run (bool): Report what would happen and change nothing.
+
+        Returns:
+            dict: What was (or would be) imported — see
+                `silloncore.engine.import_bundle`.
+        """
+        return engine_import(
+            self.engine, self.storage_root, path,
+            with_data=with_data, dry_run=dry_run,
         )
 
     # ---------------------------------------------------------

@@ -1697,3 +1697,110 @@ def get_project_summary(engine, storage_root, project_path) -> dict:
         "bytes": total,
         "daemon_running": daemon,
     }
+
+
+# ==========================================
+#              TRANSFER
+# ==========================================
+
+
+def export_bundle(
+    engine,
+    storage_root,
+    project_path,
+    run_names=None,
+    dest=None,
+    with_data: bool = True,
+    **filters,
+) -> dict:
+    """Writes runs to a portable bundle file.
+
+    The counterpart of `import_bundle`, and a different thing from
+    `export_run_report`: a report is for a person to read, this is for another
+    sillon to read back.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        storage_root (str | Path): The project storage root.
+        project_path (str | Path): The project root.
+        run_names (list[str], optional): Explicit runs. Omit to use every run
+            matching `filters`, or the whole project when there are none.
+        dest (str | Path, optional): A file to write, or a directory to write
+            a self-describing name into.
+        with_data (bool): Include the heavy data (default). False writes an
+            index-only bundle.
+        **filters: The same cheap filters as `query_runs` (`has_tag`,
+            `parameters`, `before`, `after`, ...).
+
+    Raises:
+        BundleError: If nothing matched, or a named run does not exist.
+
+    Returns:
+        dict: `{"path", "runs", "bytes", "with_data", "skipped_data"}`.
+    """
+    from silloncore.bundle import write_bundle
+
+    if run_names:
+        targets = list(run_names)
+    elif filters:
+        targets = query_runs(engine, storage_root=storage_root, **filters)
+    else:
+        targets = [entry["uuid"] for entry in select_run_identities(engine)]
+
+    return write_bundle(
+        engine, storage_root, project_path, targets, dest=dest, with_data=with_data
+    )
+
+
+def import_bundle(
+    engine, storage_root, path, with_data: bool = True, dry_run: bool = False
+) -> dict:
+    """Adds every run in a bundle that this project does not already have.
+
+    Union, never overwrite: a uuid already here is skipped, and a name already
+    taken gets the incoming run suffixed with where it came from. Safe to
+    repeat — re-importing is how you find out whether there is anything new.
+
+    Args:
+        engine (Engine): The active SQLAlchemy database engine.
+        storage_root (str | Path): The project storage root.
+        path (str | Path): The bundle to read.
+        with_data (bool): Copy the heavy data (default).
+        dry_run (bool): Report what would happen and change nothing.
+
+    Raises:
+        BundleError: If the path is not a readable bundle.
+
+    Returns:
+        dict: `{"source", "new", "already_here", "renamed", "stubs",
+            "parents_missing"}`, plus `{"imported", "files_copied",
+            "sources_copied"}` unless this was a dry run.
+    """
+    from silloncore.transfer import import_source, open_source, plan_import
+
+    source = open_source(path)
+    with source:
+        if dry_run:
+            return {**plan_import(engine, source, with_data=with_data), "dry_run": True}
+        return {
+            **import_source(engine, storage_root, source, with_data=with_data),
+            "dry_run": False,
+        }
+
+
+def inspect_bundle(path) -> dict:
+    """What a bundle holds, without importing any of it.
+
+    Args:
+        path (str | Path): The bundle to read.
+
+    Raises:
+        BundleError: If the path is not a readable bundle.
+
+    Returns:
+        dict: The source description plus a `runs` list of `{uuid, name}`.
+    """
+    from silloncore.bundle import BundleSource
+
+    source = BundleSource(path)
+    return {**source.describe(), "runs": source.manifest.get("runs") or []}

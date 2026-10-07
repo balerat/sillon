@@ -202,12 +202,80 @@ sillon fetch my_fit -r coef
 sillon fetch my_fit -r coef --dest out/
 ```
 
-### `sillon report` — a self-contained bundle
+### `sillon report` — a run written up for a person
 
 ```bash
 sillon report my_fit
 sillon report my_fit --with-data --dest out/
 ```
+
+A zip holding `manifest.json` and a readable `report.md`, for sending to a
+colleague. It is **lossy on purpose**: results over 512 bytes are recorded as a
+size rather than a value, and artifact bytes and figure images are never
+included, even with `--with-data`. Nothing reads one back.
+
+To move runs *to another machine*, that is [`export`](#sillon-export-runs-as-a-portable-bundle).
+
+---
+
+## Moving runs between machines
+
+A bundle is the machine-readable counterpart of `report`: everything needed to
+reconstruct a run somewhere else, and nothing else. See
+[Moving runs](../guide/transfer.md).
+
+### `sillon export` — runs as a portable bundle
+
+```bash
+sillon export                              # the whole project, with its data
+sillon export deg3 deg4                    # just these
+sillon export -t sweep -p degree=3         # whatever the filters match
+sillon export --dest /Volumes/share/       # a directory gets a generated name
+sillon export --no-data                    # the records only
+```
+
+Takes the same filters as [`query`](#sillon-query-find-runs), so there is one
+filter vocabulary rather than two. With no runs and no filters it exports
+everything.
+
+| Flag | Effect |
+|---|---|
+| `--dest PATH` | A file to write, or a directory to write a self-describing name into (`<project>~<host>~<when>.sillon`). Defaults to the current directory. |
+| `--no-data` | Index only — no arrays, artifacts or figures. The runs import as **stubs**: the record is there, reading the data is not. |
+| `-p` / `-m` / `-t` / `--status` / `--before` / `--after` | As in `query`. |
+
+A run whose data a row claims but disk does not have — a pruned run — exports
+its record and says so, rather than producing a bundle that looks complete.
+
+### `sillon import` — add what you do not already have
+
+```bash
+sillon import lattice~laptop~20261007T185407Z.sillon
+sillon import --dry-run bundle.sillon      # what would happen, changing nothing
+sillon import --inspect bundle.sillon      # what is in it, ignoring this project
+sillon import --no-data bundle.sillon      # the records only
+```
+
+**Union, never overwrite.** A run already here is left exactly as it is; a run
+that is not is added. Nothing an import does can lose local work, which is why
+it is safe to repeat — and repeating is the normal case, since re-importing is
+how you find out whether a bundle has anything new in it.
+
+| Situation | What happens |
+|---|---|
+| the run is already here (same uuid) | skipped and counted |
+| the name is free | added as it was |
+| the name is taken | added as `<name>~<origin host>` |
+| a lineage edge points at a run in neither project | the edge is kept and reported |
+
+Identity is the run's uuid, which has been globally unique since the beginning.
+Names are not identity — two machines will both produce a `deg3` — so the
+incoming one is suffixed and the local one keeps its name. Lineage is unaffected
+either way, because edges are followed by uuid.
+
+Everything is preserved: the uuid, both timestamps, the status, the hostname,
+the author, and the version of sillon that wrote the run — not the one importing
+it.
 
 ---
 
