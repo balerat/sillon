@@ -214,8 +214,8 @@ def _diff_code(storage_root, snap_a, snap_b) -> dict:
         result["files"][name] = {"status": status}
 
         if status in ("changed", "constants"):
-            text_a = read_source(storage_root_project(storage_root), a["source_hash"])
-            text_b = read_source(storage_root_project(storage_root), b["source_hash"])
+            text_a = read_source(storage_root, a["source_hash"])
+            text_b = read_source(storage_root, b["source_hash"])
             if text_a is not None and text_b is not None:
                 diffs.extend(
                     unified_diff(
@@ -228,17 +228,6 @@ def _diff_code(storage_root, snap_a, snap_b) -> dict:
 
     result["source_diff"] = "".join(diffs)
     return result
-
-
-def storage_root_project(storage_root) -> Path:
-    """The project root that owns a storage root.
-
-    The source store lives beside the database at `.sillon/sources`, while
-    callers hand around the storage root — which *is* `.sillon` in the default
-    layout. Normalised here so both spellings resolve.
-    """
-    path = Path(storage_root)
-    return path.parent if path.name == ".sillon" else path
 
 
 # ==========================================

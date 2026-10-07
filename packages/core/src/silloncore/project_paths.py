@@ -7,32 +7,14 @@ need to find that data, so the logic lives here once.
 
 from pathlib import Path
 
-import toml
 from sqlmodel import create_engine
 
+from silloncommon import project_config
 from silloncommon.database import get_engine, migrate_schema, sqlite_url
 
-
-def resolve_storage_root(project_path) -> Path:
-    """Returns the folder holding a project's `glob`, `artifact` and `figure` dirs.
-
-    Reads the storage root from `.sillon/config.toml`, defaulting to the
-    `.sillon` directory itself when no custom root is configured.
-
-    Args:
-        project_path (str | Path): The project root (folder containing `.sillon`).
-
-    Returns:
-        Path: The resolved storage root.
-    """
-    sillon_dir = Path(project_path).expanduser().resolve() / ".sillon"
-    config_path = sillon_dir / "config.toml"
-    # if config_path.exists():
-    #     config = toml.load(config_path)
-    #     storage_root = config.get("storage", {}).get("storage_root")
-    #     if storage_root:
-    #         return Path(storage_root)
-    return sillon_dir
+# The config is parsed in exactly one place, shared with the client and the
+# daemon, because this module and the daemon used to disagree about it.
+resolve_storage_root = project_config.resolve_storage_root
 
 
 def resolve_engine(project_path):
@@ -80,13 +62,9 @@ def resolve_project_name(project_path) -> str:
     Returns:
         str: The project name, or "".
     """
-    config_path = Path(project_path).expanduser().resolve() / ".sillon" / "config.toml"
-    try:
-        name = toml.load(config_path).get("Environment", {}).get("project_name")
-        if name:
-            return name
-    except (OSError, toml.TomlDecodeError, KeyError):
-        pass
+    name = project_config.project_name(project_path)
+    if name:
+        return name
 
     try:
         from silloncommon import registry

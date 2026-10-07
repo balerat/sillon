@@ -12,6 +12,7 @@ from .metadata import (
     get_user_script_path,
 )
 from silloncommon.codeversion import compute_version
+from silloncommon import project_config
 from silloncommon.source_store import store_sources
 from silloncommon import access_log
 from silloncommon.commands import (
@@ -153,7 +154,11 @@ class Tracker:
                 return
 
             version = compute_version(sources)
-            store_sources(self.project_path, sources, version["files"])
+            store_sources(
+                project_config.resolve_storage_root(self.project_path),
+                sources,
+                version["files"],
+            )
 
             self.add_metadata(
                 "sillon.code.version",

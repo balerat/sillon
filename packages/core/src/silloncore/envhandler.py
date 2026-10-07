@@ -9,7 +9,7 @@ import toml
 from sqlmodel import SQLModel, Session
 
 from silloncommon.database import insert_simulation, create_default_engine_root
-from silloncommon import registry
+from silloncommon import project_config, registry
 from .glob import Glob, get_hash
 
 # .sillon file structure
@@ -70,7 +70,7 @@ class ProjectEnvironmentHandler:
         self._project_id = uuid.uuid4()  # Will be set or loaded in init_environment
         self._config = {}
         if project_storage_root:
-            self._storage_root = project_storage_root / "sillon-storage" /  f"{self._project_id}"
+            self._storage_root = Path(project_storage_root) / "sillon-storage" / f"{self._project_id}"
         else:
             self._storage_root = self._sillon_dir
         self._config["Environment"] = {
@@ -79,7 +79,13 @@ class ProjectEnvironmentHandler:
             # Kept here too so a copied or moved project keeps its identity.
             "project_name": self._project_name or "",
         }
-        self._config["storage"] = {"storage_root": str(self._storage_root)}
+        # Relative when the root is inside the project, so moving or copying
+        # the project does not leave the daemon writing to the old path.
+        self._config["storage"] = {
+            "storage_root": project_config.store_storage_root(
+                self._project_path, self._storage_root
+            )
+        }
 
     def _create_sillon_dir(self):
         self._sillon_dir = self._project_path / ".sillon"
@@ -95,7 +101,19 @@ class ProjectEnvironmentHandler:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 self._config = toml.load(f)
                 self._project_id = self._config["Environment"]["project_id"]
-                self._storage_root = Path(self._config["storage"]["storage_root"])
+            # Through the shared resolver, so the daemon writes where the
+            # readers look. It also rewrites a stale absolute root -- a
+            # project moved while its data lived on another disk -- back to
+            # `.sillon` rather than recreating the old path here.
+            self._storage_root = project_config.resolve_storage_root(self._project_path)
+            recorded_root = (self._config.get("storage") or {}).get("storage_root")
+            canonical_root = project_config.store_storage_root(
+                self._project_path, self._storage_root
+            )
+            if recorded_root != canonical_root:
+                self._config.setdefault("storage", {})["storage_root"] = canonical_root
+                with open(self._config_path, "w", encoding="utf-8") as f:
+                    toml.dump(self._config, f)
 
             # A project created before the name was stored here, or one whose
             # first run had no project_name, learns it from the first run that
@@ -231,10 +249,6 @@ class RunEnvironmentHandler:
         artifact_path (Path): The specific folder path for this run's artifacts.
         glob_path (Path): The specific folder path for this run's HDF5 glob file.
     """
-    def _load_config(self):
-        config = toml.load(self.project_path / ".sillon" / "config.toml")
-        return config
-    
     def __init__(self, uuid, project_path):
         """Initializes the environment handler for a specific run.
 
@@ -244,15 +258,14 @@ class RunEnvironmentHandler:
         """
         self.uuid = uuid
         self.project_path = pathlib.Path(project_path)
-        config = self._load_config()
-        self.storage_root = Path(config["storage"]["storage_root"])
-        
+        # Same resolver as the readers use, so a run's data lands where
+        # `sillon` and `sillonlab` will later look for it.
+        self.storage_root = project_config.resolve_storage_root(self.project_path)
+
         self.artifact_path = self.storage_root / "artifact" / f"{self.uuid}"
         self.glob_path = self.storage_root / "glob" / f"{self.uuid}"
 
-        # self.artifact_path = self.project_path / ".sillon" / "artifact" / f"{self.uuid}"
-        # self.glob_path = self.project_path / ".sillon" / "glob" / f"{self.uuid}"
-        try: 
+        try:
             os.makedirs(self.artifact_path, exist_ok=True)
             os.makedirs(self.glob_path, exist_ok=True)
         except Exception as e:
