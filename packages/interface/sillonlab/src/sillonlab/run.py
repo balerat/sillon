@@ -49,26 +49,42 @@ class Run:
         status (str): The final execution status of the run.
     """
 
-    def __init__(self, name: str, engine, storage_root: Path, context: dict = None) -> None:
+    def __init__(
+        self,
+        name: str = None,
+        engine=None,
+        storage_root: Path = None,
+        context: dict = None,
+        uuid: str = None,
+    ) -> None:
         """Initializes the run handle.
 
         Args:
-            name (str): The run name (or uuid) used to query the engine.
+            name (str, optional): The run name (or uuid) used to query the
+                engine. Optional only when `uuid` is given.
             engine (Engine): The active SQLAlchemy engine of the project.
             storage_root (Path): The root folder holding the `glob` and
                 `artifact` directories of the project.
             context (dict, optional): A summary dictionary as returned by
                 `silloncore.engine.get_project_context` to pre-fill the
                 lightweight fields. Defaults to None.
+            uuid (str, optional): The run's uuid. When given it is what the
+                handle looks the run up by, and `name` is only a label until
+                the snapshot loads. Names are not unique — two machines
+                merged into one project can each contribute a `deg3` — so
+                anything that already knows the uuid should pass it.
         """
-        self.name = name
         self.engine = engine
         self.storage_root = Path(storage_root)
 
         context = context or {}
-        self.uuid = None
+        self.uuid = uuid or context.get("uuid")
+        self.name = name
         self.timestamp = context.get("timestamp")
         self.status = context.get("status")
+
+        if self.uuid is None and name is None:
+            raise ValueError("A Run needs a name or a uuid.")
 
         self._snapshot = None
 
@@ -79,15 +95,33 @@ class Run:
     def _load_snapshot(self) -> dict:
         """Fetches and caches the full run snapshot from the engine."""
         if self._snapshot is None:
-            snapshot = get_run_snapshot(self.engine, self.name)
+            # The uuid is the run's identity; the name is a label that another
+            # machine may also have used. Look up by uuid whenever we have one.
+            snapshot = get_run_snapshot(self.engine, self.uuid or self.name)
             if snapshot is None:
-                raise LookupError(f"Run '{self.name}' not found in the project database.")
+                raise LookupError(self._missing_message())
             self._snapshot = snapshot
             self.name = snapshot["name"]
             self.uuid = snapshot["uuid"]
             self.timestamp = snapshot["date"]
             self.status = snapshot["status"]
         return self._snapshot
+
+    def _missing_message(self) -> str:
+        """Why a lookup failed — naming both halves of the identity.
+
+        A uuid that is not here usually means a lineage edge whose other end
+        was never imported, and saying only the name makes that look like a
+        typo. `sillon check` lists these.
+        """
+        if self.uuid and self.name:
+            return (
+                f"Run '{self.name}' ({self.uuid}) is not in this project. "
+                "A lineage edge can point at a run that was never imported."
+            )
+        if self.uuid:
+            return f"No run with uuid '{self.uuid}' in this project."
+        return f"Run '{self.name}' not found in the project database."
 
     # ---------------------------------------------------------
     # Tracked data as properties
@@ -149,10 +183,23 @@ class Run:
 
         Inheritance copies nothing; it only records the link. Walk back to read
         a parent's parameters, e.g. `run.parents()[0].load_parameter("lr")`.
+
+        The edge carries both the uuid and the name the parent had when the
+        link was made. The handle follows the **uuid**: a project that two
+        machines were merged into can hold more than one run called `deg3`,
+        and the name in the edge would then find the wrong one.
         """
-        names = [p["name"] for p in (self._load_snapshot().get("parents") or [])]
         return RunCollection(
-            [Run(name=n, engine=self.engine, storage_root=self.storage_root) for n in names]
+            [
+                Run(
+                    name=edge.get("name"),
+                    uuid=edge.get("uuid"),
+                    engine=self.engine,
+                    storage_root=self.storage_root,
+                )
+                for edge in (self._load_snapshot().get("parents") or [])
+                if edge.get("uuid") or edge.get("name")
+            ]
         )
 
     def parent_links(self) -> list:
@@ -162,9 +209,16 @@ class Run:
     def children(self) -> "RunCollection":
         """Runs that derive from this run (reverse lineage), as `Run` handles."""
         self._load_snapshot()  # ensure self.uuid is populated
-        names = [child["name"] for child in _engine_find_children(self.engine, self.uuid)]
         return RunCollection(
-            [Run(name=n, engine=self.engine, storage_root=self.storage_root) for n in names]
+            [
+                Run(
+                    name=child["name"],
+                    uuid=child["uuid"],
+                    engine=self.engine,
+                    storage_root=self.storage_root,
+                )
+                for child in _engine_find_children(self.engine, self.uuid)
+            ]
         )
 
     # ---------------------------------------------------------
