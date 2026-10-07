@@ -18,7 +18,6 @@ were not compared, rather than stalling a diff on a gigabyte.
 
 import math
 from difflib import unified_diff
-from pathlib import Path
 
 from silloncommon.source_store import read_source
 
