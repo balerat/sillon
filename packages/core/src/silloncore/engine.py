@@ -1715,7 +1715,7 @@ def export_bundle(
 ) -> dict:
     """Writes runs to a portable bundle file.
 
-    The counterpart of `import_bundle`, and a different thing from
+    The counterpart of `import_from`, and a different thing from
     `export_run_report`: a report is for a person to read, this is for another
     sillon to read back.
 
@@ -1752,24 +1752,28 @@ def export_bundle(
     )
 
 
-def import_bundle(
+def import_from(
     engine, storage_root, path, with_data: bool = True, dry_run: bool = False
 ) -> dict:
-    """Adds every run in a bundle that this project does not already have.
+    """Adds every run a source has and this project does not.
 
     Union, never overwrite: a uuid already here is skipped, and a name already
     taken gets the incoming run suffixed with where it came from. Safe to
     repeat — re-importing is how you find out whether there is anything new.
 
+    The source is a bundle file or another project directory on this machine.
+    Crossing a machine boundary needs a bundle; merging two projects that are
+    both right here does not.
+
     Args:
         engine (Engine): The active SQLAlchemy database engine.
         storage_root (str | Path): The project storage root.
-        path (str | Path): The bundle to read.
+        path (str | Path): A bundle file, or a project directory.
         with_data (bool): Copy the heavy data (default).
         dry_run (bool): Report what would happen and change nothing.
 
     Raises:
-        BundleError: If the path is not a readable bundle.
+        BundleError: If the path is neither a readable bundle nor a project.
 
     Returns:
         dict: `{"source", "new", "already_here", "renamed", "stubs",
@@ -1786,6 +1790,82 @@ def import_bundle(
             **import_source(engine, storage_root, source, with_data=with_data),
             "dry_run": False,
         }
+
+
+
+def scan_and_import(
+    engine,
+    storage_root,
+    project_path,
+    root,
+    with_data: bool = True,
+    dry_run: bool = False,
+) -> dict:
+    """Finds every project under a directory tree and imports each of them.
+
+    For a history of projects made wherever the script happened to be. The
+    destination is left out of its own scan, and a project found inside
+    another one is not treated as a second project.
+
+    Args:
+        engine (Engine): The destination project's database engine.
+        storage_root (str | Path): The destination's storage root.
+        project_path (str | Path): The destination project root, so it can be
+            skipped if it lies under `root`.
+        root (str | Path): The directory to search.
+        with_data (bool): Copy the heavy data (default).
+        dry_run (bool): Report what would happen and change nothing.
+
+    Raises:
+        BundleError: If the tree holds no projects other than this one.
+
+    Returns:
+        dict: `{"root", "sources": [...], "imported", "skipped", "dry_run"}`,
+            where each entry of `sources` is one project's import result.
+    """
+    from silloncore.bundle import BundleError
+    from silloncore.transfer import (
+        ProjectSource,
+        find_projects,
+        import_source,
+        plan_import,
+    )
+
+    root = Path(root).expanduser().resolve()
+    found = find_projects(root, skip=[project_path])
+    if not found:
+        raise BundleError(f"No sillon projects under {root} (other than this one).")
+
+    results = []
+    for candidate in found:
+        try:
+            source = ProjectSource(candidate)
+        except BundleError as exc:
+            # A `.sillon` with no database, or one that cannot be opened. Say
+            # so and carry on: one unreadable project must not stop the rest.
+            results.append({"path": str(candidate), "error": str(exc)})
+            continue
+        with source:
+            if dry_run:
+                outcome = plan_import(engine, source, with_data=with_data)
+            else:
+                outcome = import_source(engine, storage_root, source, with_data=with_data)
+        results.append({"path": str(candidate), **outcome})
+
+    # A dry run has no `imported` count -- it has a plan. Count the same
+    # thing either way, so the summary cannot disagree with the table under it.
+    def _count(outcome):
+        if dry_run:
+            return len(outcome.get("new") or [])
+        return outcome.get("imported", 0)
+
+    return {
+        "root": str(root),
+        "sources": results,
+        "imported": sum(_count(r) for r in results),
+        "skipped": sum(len(r.get("already_here") or []) for r in results),
+        "dry_run": bool(dry_run),
+    }
 
 
 def inspect_bundle(path) -> dict:

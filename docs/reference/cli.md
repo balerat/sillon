@@ -250,11 +250,24 @@ its record and says so, rather than producing a bundle that looks complete.
 ### `sillon import` — add what you do not already have
 
 ```bash
-sillon import lattice~laptop~20261007T185407Z.sillon
+sillon import lattice~laptop~20261007T185407Z.sillon   # a bundle
+sillon import ~/old-phd/shaking                        # another project
+sillon import --scan ~/Code/phd                        # every project under it
 sillon import --dry-run bundle.sillon      # what would happen, changing nothing
 sillon import --inspect bundle.sillon      # what is in it, ignoring this project
 sillon import --no-data bundle.sillon      # the records only
 ```
+
+The source is a **bundle file** or **another project directory** on this
+machine. Crossing a machine boundary needs a bundle; merging two projects that
+are both right here does not, so there is no packing step for that.
+
+| Flag | Effect |
+|---|---|
+| `--scan` | Treat the source as a directory to search, and import every project under it. This project is left out of its own scan. |
+| `--dry-run` | Print the plan and change nothing. The plan shown is the plan that would be carried out, names and all. |
+| `--inspect` | Describe one source without looking at this project at all — works for a bundle you have not decided about yet. |
+| `--no-data` | Records only. |
 
 **Union, never overwrite.** A run already here is left exactly as it is; a run
 that is not is added. Nothing an import does can lose local work, which is why
@@ -272,6 +285,10 @@ Identity is the run's uuid, which has been globally unique since the beginning.
 Names are not identity — two machines will both produce a `deg3` — so the
 incoming one is suffixed and the local one keeps its name. Lineage is unaffected
 either way, because edges are followed by uuid.
+
+The suffix names whatever actually distinguishes the source: the **machine** for
+a bundle (`deg3~laptop`), the **project** for a directory on this one
+(`deg3~Alpha`), since both projects share a hostname and it would say nothing.
 
 Everything is preserved: the uuid, both timestamps, the status, the hostname,
 the author, and the version of sillon that wrote the run — not the one importing

@@ -55,6 +55,55 @@ arrive as **stubs**: they show up in `sillon list` and `query`, and reading
 their data fails. Useful for "what did you run?" when the arrays are gigabytes
 and you only want the index.
 
+## Merging projects that are already here
+
+A bundle is for crossing a machine boundary. On one machine the other project
+is right there, so there is nothing to pack:
+
+```bash
+sillon import ~/old-phd/shaking
+```
+
+And when the projects are scattered — which is what you have after a few years
+of starting them wherever the script happened to be — point sillon at the tree:
+
+```bash
+sillon import --scan ~/Code/phd
+```
+
+```text
+╭─ Scanned ──────────────────────────────────────────────────────────╮
+│                                                                    │
+│  3 project(s) under /Users/you/Code/phd — added 4 run(s)           │
+│                                                                    │
+│     Project     New     Already here     Location                  │
+│   ───────────────────────────────────────────────────────────────   │
+│     Alpha         2                0     /Users/you/Code/phd/alpha │
+│     Legacy        1                0     /Users/you/Code/phd/old   │
+│     Beta          1                0     /Users/you/Code/phd/s/b   │
+│                                                                    │
+│    renamed  1 name(s) were already taken here                      │
+│                                                                    │
+╰────────────────────────────────────────────────────────────────────╯
+```
+
+`--scan` finds projects at any depth, leaves the destination out of its own
+scan, and does not treat a `.sillon` *inside* a project's data as a second
+project. A project it cannot open — a `.sillon/` with no database, say — is
+reported and skipped rather than stopping the rest.
+
+Source projects are only read. Nothing is moved or deleted, so the originals
+are still there afterwards and you can scan again later.
+
+### What the collision suffix names
+
+The suffix is whatever actually distinguishes the source:
+
+| Source | Suffix | Why |
+|---|---|---|
+| a bundle | `deg3~laptop` | the machine it came from — the interesting difference is "not here" |
+| a project on this machine | `deg3~Alpha` | the project's name; both share a hostname, so that would say nothing |
+
 ## Importing is union, never overwrite
 
 An import adds what you do not have and touches nothing you do.
@@ -133,8 +182,10 @@ project.export(dest="/Volumes/share/")           # everything
 project.export(tags="sweep", dest="sweep.sillon")
 project.export(["deg3"], with_data=False)
 
-project.import_bundle("sweep.sillon", dry_run=True)
-project.import_bundle("sweep.sillon")
+project.import_from("sweep.sillon", dry_run=True)
+project.import_from("sweep.sillon")
+project.import_from("~/old-phd/shaking")     # another project, no bundle
+project.import_tree("~/Code/phd")            # every project under it
 ```
 
 ## What a bundle looks like inside

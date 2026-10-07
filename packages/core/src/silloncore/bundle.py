@@ -42,6 +42,7 @@ from silloncommon import __version__ as SILLON_VERSION
 __all__ = [
     "BUNDLE_FORMAT",
     "BUNDLE_SUFFIX",
+    "DATA_GROUPS",
     "MANIFEST_NAME",
     "BundleError",
     "write_bundle",
@@ -320,6 +321,9 @@ class BundleSource:
         return {
             "kind": "bundle",
             "label": self.path.name,
+            # What a colliding name gets tagged with. For a bundle that is the
+            # machine it came from: the interesting difference is "not here".
+            "origin_label": source.get("hostname") or source.get("project_name") or "",
             "project_id": source.get("project_id") or "",
             "project_name": source.get("project_name") or "",
             "hostname": source.get("hostname") or "",

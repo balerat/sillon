@@ -133,7 +133,7 @@ def bundle(projects):
 def imported(bundle):
     import sillonlab as sl
 
-    result = sl.load_project(DEST).import_bundle(bundle)
+    result = sl.load_project(DEST).import_from(bundle)
     assert result["imported"] == 4, result
     return result
 
@@ -269,7 +269,7 @@ def test_local_work_is_untouched(imported):
 
 def test_importing_again_is_a_no_op(bundle, imported):
     before = {r.name for r in _dest().runs()}
-    again = _dest().import_bundle(bundle)
+    again = _dest().import_from(bundle)
     assert again["imported"] == 0
     assert len(again["already_here"]) == 4
     assert {r.name for r in _dest().runs()} == before

@@ -382,6 +382,7 @@ __all__ = [
     "print_export_result",
     "print_import_plan",
     "print_import_result",
+    "print_scan_result",
     "Columns",
     "Group",
     "Text",
@@ -916,7 +917,7 @@ def print_import_plan(result: dict) -> None:
 
 
 def print_import_result(result: dict) -> None:
-    """Prints a completed `silloncore.engine.import_bundle` payload."""
+    """Prints a completed `silloncore.engine.import_from` payload."""
     lines = [_source_line(result["source"]), Text("")]
 
     imported = result["imported"]
@@ -971,3 +972,62 @@ def print_import_result(result: dict) -> None:
         )
 
     console.print(themed_panel(Group(*lines), title="Imported"))
+
+
+def print_scan_result(result: dict) -> None:
+    """Prints a `silloncore.engine.scan_and_import` payload.
+
+    One row per project found, because the useful question after scanning a
+    tree is which of these actually had anything in it.
+    """
+    table = themed_table(padding=(0, 2))
+    table.add_column("Project", style=f"bold {c('spray')}")
+    table.add_column("New", justify="right", style=c("foam"))
+    table.add_column("Already here", justify="right", style=S_DIM)
+    table.add_column("Location", style=S_DIM, overflow="fold", ratio=1)
+
+    failed = []
+    for entry in result["sources"]:
+        if entry.get("error"):
+            failed.append(entry)
+            continue
+        source = entry["source"]
+        count = len(entry["new"]) if result["dry_run"] else entry.get("imported", 0)
+        table.add_row(
+            source.get("project_name") or Path(entry["path"]).name,
+            str(count) if count else "—",
+            str(len(entry.get("already_here") or [])),
+            entry["path"],
+        )
+
+    verb = "would add" if result["dry_run"] else "added"
+    subtitle = Text(
+        f"{len(result['sources']) - len(failed)} project(s) under {result['root']} — "
+        f"{verb} {result['imported']} run(s)",
+        style=f"italic {c('ember')}",
+    )
+    body = [subtitle, Text(""), table]
+
+    renamed = [
+        entry
+        for source in result["sources"]
+        for entry in (source.get("renamed") or [])
+    ]
+    if renamed:
+        body.append(
+            Text.assemble(
+                ("\n  renamed  ", S_LABEL),
+                (f"{len(renamed)} name(s) were already taken here", S_DIM),
+            )
+        )
+    for entry in failed:
+        body.append(
+            Text.assemble(
+                ("\n  skipped  ", S_LABEL),
+                (entry["error"], "bold #E06C75"),
+            )
+        )
+
+    console.print(
+        themed_panel(Group(*body), title="Scanned" if not result["dry_run"] else "Would scan")
+    )

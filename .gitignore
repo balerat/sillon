@@ -37,3 +37,7 @@ profiling.txt
 examples/**/.sillon/
 
 __pycache__/
+
+# Scratch projects the test suites build (fixtures clean them up, but a
+# fixture that fails during *setup* leaves its directory behind).
+packages/**/tests/**/_*/

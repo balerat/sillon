@@ -21,7 +21,8 @@ from silloncore.engine import (
     diff_across_runs as engine_diff_across,
     find_similar_runs as engine_find_similar,
     export_bundle as engine_export,
-    import_bundle as engine_import,
+    import_from as engine_import,
+    scan_and_import as engine_scan_import,
 )
 
 from sillonlab.display import print_context
@@ -458,30 +459,60 @@ class Project:
             **query,
         )
 
-    def import_bundle(self, path, with_data: bool = True, dry_run: bool = False) -> dict:
-        """Adds every run in a bundle that this project does not already have.
+    def import_from(self, path, with_data: bool = True, dry_run: bool = False) -> dict:
+        """Adds every run a source has and this project does not.
+
+        The source is a bundle file, or **another project directory** on this
+        machine — crossing a machine boundary needs a bundle, merging two
+        projects that are both right here does not.
 
         Union, never overwrite: a run already here is left alone, and an
         incoming name that is taken gets suffixed with where it came from. Safe
-        to repeat — re-importing is how you find out whether a bundle has
+        to repeat — re-importing is how you find out whether a source has
         anything new in it.
 
         Example:
             ```python
-            project.import_bundle("lattice~laptop.sillon", dry_run=True)
+            project.import_from("lattice~laptop.sillon", dry_run=True)
+            project.import_from("~/old-phd/shaking")
             ```
 
         Args:
-            path (str | Path): The bundle to read.
+            path (str | Path): A bundle file, or a project directory.
             with_data (bool): Copy the heavy data. Defaults to True.
             dry_run (bool): Report what would happen and change nothing.
 
         Returns:
             dict: What was (or would be) imported — see
-                `silloncore.engine.import_bundle`.
+                `silloncore.engine.import_from`.
         """
         return engine_import(
             self.engine, self.storage_root, path,
+            with_data=with_data, dry_run=dry_run,
+        )
+
+    def import_tree(self, root, with_data: bool = True, dry_run: bool = False) -> dict:
+        """Finds every project under a directory and imports each of them.
+
+        For a history of projects made wherever the script happened to be.
+        This project is left out of its own scan.
+
+        Example:
+            ```python
+            project.import_tree("~/Code/phd", dry_run=True)
+            ```
+
+        Args:
+            root (str | Path): The directory to search.
+            with_data (bool): Copy the heavy data. Defaults to True.
+            dry_run (bool): Report what would happen and change nothing.
+
+        Returns:
+            dict: `{"root", "sources", "imported", "skipped"}` — see
+                `silloncore.engine.scan_and_import`.
+        """
+        return engine_scan_import(
+            self.engine, self.storage_root, self.path, root,
             with_data=with_data, dry_run=dry_run,
         )
 

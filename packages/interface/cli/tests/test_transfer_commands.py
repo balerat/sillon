@@ -101,7 +101,10 @@ def _export(project, **args):
 
 
 def _import(project, source, **args):
-    defaults = {"source": str(source), "dry_run": False, "no_data": False, "inspect": False}
+    defaults = {
+        "source": str(source), "dry_run": False, "no_data": False,
+        "inspect": False, "scan": False,
+    }
     defaults.update(args)
     return import_cmd.command(
         resolve_engine(project), resolve_storage_root(project), defaults
@@ -211,3 +214,60 @@ def test_the_round_trip_through_both_commands(origin, dest, tmp_path):
     assert set(arrived) == {"deg3", "deg4"}
     assert arrived["deg3"]["uuid"] == RUN_A
     assert arrived["deg3"]["sillonversion"] == "2.1.0"
+
+
+# ==========================================
+#              IMPORT --scan
+# ==========================================
+def test_import_scan_walks_a_tree(tmp_path, dest):
+    from silloncommon.database import select_run_index
+
+    tree = tmp_path / "tree"
+    _make_project(tree / "alpha", [(RUN_A, "deg3", 3, [])])
+    _make_project(tree / "sub" / "beta", [(RUN_B, "deg4", 4, [])])
+
+    result = _import(dest, tree, scan=True)
+    assert result["imported"] == 2
+    assert len(result["sources"]) == 2
+    assert {e["name"] for e in select_run_index(resolve_engine(dest))} == {"deg3", "deg4"}
+
+
+def test_import_scan_dry_run(tmp_path, dest):
+    from silloncommon.database import select_run_index
+
+    tree = tmp_path / "tree"
+    _make_project(tree / "alpha", [(RUN_A, "deg3", 3, [])])
+
+    result = _import(dest, tree, scan=True, dry_run=True)
+    assert result["dry_run"] is True
+    assert result["imported"] == 1
+    assert select_run_index(resolve_engine(dest)) == []
+
+
+def test_import_scan_of_an_empty_tree_reports_instead_of_raising(tmp_path, dest):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _import(dest, empty, scan=True) is None
+
+
+def test_scan_and_inspect_together_are_refused(tmp_path, dest):
+    """They answer different questions; silently picking one would mislead."""
+    tree = tmp_path / "tree"
+    _make_project(tree / "alpha", [(RUN_A, "deg3", 3, [])])
+    assert _import(dest, tree, scan=True, inspect=True) is None
+
+
+def test_import_of_a_project_directory(tmp_path, dest):
+    from silloncommon.database import select_run_index
+
+    origin = _make_project(tmp_path / "origin2", [(RUN_A, "deg3", 3, [])])
+    result = _import(dest, origin)
+    assert result["imported"] == 1
+    assert result["source"]["kind"] == "project"
+    assert {e["name"] for e in select_run_index(resolve_engine(dest))} == {"deg3"}
+
+
+def test_import_of_a_plain_directory_reports_instead_of_raising(tmp_path, dest):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert _import(dest, plain) is None

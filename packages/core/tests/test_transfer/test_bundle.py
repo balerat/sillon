@@ -37,7 +37,7 @@ from silloncore.bundle import (
     default_bundle_name,
     read_manifest,
 )
-from silloncore.engine import export_bundle, import_bundle, inspect_bundle
+from silloncore.engine import export_bundle, import_from, inspect_bundle
 
 RUN_A = "aaaaaaaa-0000-0000-0000-00000000000a"
 RUN_B = "bbbbbbbb-0000-0000-0000-00000000000b"
@@ -277,7 +277,7 @@ def test_inspect_does_not_need_a_project(origin):
 # ==========================================
 def test_a_run_arrives_with_its_identity_intact(origin, empty_dest):
     bundle = _export(origin)["path"]
-    import_bundle(empty_dest["engine"], empty_dest["storage"], bundle)
+    import_from(empty_dest["engine"], empty_dest["storage"], bundle)
 
     rows = {e["name"]: e for e in select_run_index(empty_dest["engine"])}
     assert set(rows) == {"deg3", "deg4"}
@@ -293,7 +293,7 @@ def test_a_run_arrives_with_its_identity_intact(origin, empty_dest):
 
 
 def test_the_data_trees_land_where_readers_look(origin, empty_dest):
-    import_bundle(empty_dest["engine"], empty_dest["storage"], _export(origin)["path"])
+    import_from(empty_dest["engine"], empty_dest["storage"], _export(origin)["path"])
     storage = empty_dest["storage"]
 
     with h5py.File(storage / "glob" / RUN_A / "glob.hdf5", "r") as g:
@@ -305,7 +305,7 @@ def test_the_data_trees_land_where_readers_look(origin, empty_dest):
 
 def test_child_rows_are_repointed_at_the_new_primary_key(origin, empty_dest):
     """The integer PK is machine-local; the children must follow the new one."""
-    import_bundle(empty_dest["engine"], empty_dest["storage"], _export(origin)["path"])
+    import_from(empty_dest["engine"], empty_dest["storage"], _export(origin)["path"])
     with Session(empty_dest["engine"]) as session:
         run = session.exec(
             select(SimulationTable).where(SimulationTable.uuid == RUN_A)
@@ -325,8 +325,8 @@ def test_child_rows_are_repointed_at_the_new_primary_key(origin, empty_dest):
 
 def test_importing_twice_adds_nothing(origin, empty_dest):
     bundle = _export(origin)["path"]
-    first = import_bundle(empty_dest["engine"], empty_dest["storage"], bundle)
-    second = import_bundle(empty_dest["engine"], empty_dest["storage"], bundle)
+    first = import_from(empty_dest["engine"], empty_dest["storage"], bundle)
+    second = import_from(empty_dest["engine"], empty_dest["storage"], bundle)
 
     assert first["imported"] == 2
     assert second["imported"] == 0
@@ -336,7 +336,7 @@ def test_importing_twice_adds_nothing(origin, empty_dest):
 
 def test_a_dry_run_changes_nothing(origin, empty_dest):
     bundle = _export(origin)["path"]
-    plan = import_bundle(empty_dest["engine"], empty_dest["storage"], bundle, dry_run=True)
+    plan = import_from(empty_dest["engine"], empty_dest["storage"], bundle, dry_run=True)
     assert plan["dry_run"] is True
     assert len(plan["new"]) == 2
     assert select_run_index(empty_dest["engine"]) == []
@@ -352,7 +352,7 @@ def test_a_taken_name_is_suffixed_with_where_it_came_from(origin, tmp_path):
         local, with_data=False,
         rows=[_row("cccccccc-0000-0000-0000-00000000000c", "deg3", 99)],
     )
-    result = import_bundle(engine, storage, _export(origin)["path"])
+    result = import_from(engine, storage, _export(origin)["path"])
 
     names = {e["name"]: e for e in select_run_index(engine)}
     assert set(names) == {"deg3", "deg3~origin-host", "deg4"}
@@ -376,7 +376,7 @@ def test_two_incoming_runs_with_the_same_name(tmp_path):
         local, with_data=False,
         rows=[_row("dddddddd-0000-0000-0000-00000000000d", "deg3", 99)],
     )
-    import_bundle(dest_engine, dest_storage, bundle["path"])
+    import_from(dest_engine, dest_storage, bundle["path"])
 
     names = sorted(e["name"] for e in select_run_index(dest_engine))
     assert names == ["deg3", "deg3~origin-host", "deg3~origin-host_2"]
@@ -391,7 +391,7 @@ def test_lineage_survives_the_rename(origin, tmp_path):
         local, with_data=False,
         rows=[_row("cccccccc-0000-0000-0000-00000000000c", "deg3", 99)],
     )
-    import_bundle(engine, storage, _export(origin)["path"])
+    import_from(engine, storage, _export(origin)["path"])
 
     project = sl.load_project(local)
     parent = project.get("deg4").parents()[0]
@@ -405,7 +405,7 @@ def test_lineage_survives_the_rename(origin, tmp_path):
 # ==========================================
 def test_no_data_import_records_the_runs_as_stubs(origin, empty_dest):
     bundle = _export(origin)["path"]
-    result = import_bundle(empty_dest["engine"], empty_dest["storage"], bundle, with_data=False)
+    result = import_from(empty_dest["engine"], empty_dest["storage"], bundle, with_data=False)
 
     assert result["imported"] == 2
     assert len(result["stubs"]) == 2
@@ -418,7 +418,7 @@ def test_no_data_import_records_the_runs_as_stubs(origin, empty_dest):
 def test_a_child_without_its_parent_reports_the_dangling_edge(origin, empty_dest):
     """Export the child only; the edge is true but unwalkable."""
     bundle = _export(origin, run_names=["deg4"])["path"]
-    result = import_bundle(empty_dest["engine"], empty_dest["storage"], bundle)
+    result = import_from(empty_dest["engine"], empty_dest["storage"], bundle)
 
     assert result["imported"] == 1
     assert result["parents_missing"] == [
@@ -430,7 +430,7 @@ def test_a_child_without_its_parent_reports_the_dangling_edge(origin, empty_dest
 
 
 def test_a_parent_in_the_same_bundle_is_not_reported_missing(origin, empty_dest):
-    result = import_bundle(
+    result = import_from(
         empty_dest["engine"], empty_dest["storage"], _export(origin)["path"]
     )
     assert result["parents_missing"] == []
@@ -439,7 +439,7 @@ def test_a_parent_in_the_same_bundle_is_not_reported_missing(origin, empty_dest)
 def test_a_parent_already_in_the_destination_is_not_reported_missing(origin, tmp_path):
     local = tmp_path / "local"
     engine, storage = _project(local, with_data=False, rows=[_row(RUN_A, "deg3", 3)])
-    result = import_bundle(engine, storage, _export(origin, run_names=["deg4"])["path"])
+    result = import_from(engine, storage, _export(origin, run_names=["deg4"])["path"])
     assert result["parents_missing"] == []
 
 
@@ -458,7 +458,7 @@ def test_a_source_blob_already_present_is_not_rewritten(origin, empty_dest):
     blob.parent.mkdir(parents=True, exist_ok=True)
     blob.write_text("print('hello')")
 
-    result = import_bundle(
+    result = import_from(
         empty_dest["engine"], empty_dest["storage"], _export(origin)["path"]
     )
     assert result["sources_copied"] == 0

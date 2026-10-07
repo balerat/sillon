@@ -210,7 +210,7 @@ bundle — see [Moving runs between machines](transfer.md).
 
 ```python
 project.export(tags="sweep", dest="/Volumes/share/")
-project.import_bundle("sweep.sillon", dry_run=True)
+project.import_from("sweep.sillon", dry_run=True)
 ```
 
 ## Comparing runs
