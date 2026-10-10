@@ -701,12 +701,19 @@ class RunCollection:
         ```
 
         Runs missing the named key sort last, whatever the direction, so a
-        partially-logged run never displaces a real result.
+        partially-logged run never displaces a real result. But a key that
+        **no** run has raises, rather than quietly returning the collection in
+        the order it already had — a typo there would otherwise hand you the
+        first five runs you happened to log and let you call them the best.
 
         Args:
             key (Callable[[Run], Any] | str): A key function, or a parameter or
                 result name.
             reverse (bool): Descending order. Defaults to False.
+
+        Raises:
+            LookupError: If no run in the collection has `key`.
+            TypeError: If the values cannot be ordered against each other.
 
         Returns:
             RunCollection: A new collection; the original is left untouched.
@@ -718,7 +725,16 @@ class RunCollection:
 
         def _lookup(run):
             if key in run.parameters:
-                return run.parameters[key]
+                value = run.parameters[key]
+                # A heavy parameter keeps only a reference in the database --
+                # the array itself is in the glob. Resolve it, as this already
+                # did for results, instead of trying to order the markers.
+                if isinstance(value, dict) and value.get("__sillon_array_ref__"):
+                    try:
+                        return run.load_parameter(key)
+                    except (LookupError, OSError):
+                        return missing
+                return value
             if key in run.results:
                 try:
                     return run.load_result(key)
@@ -730,7 +746,34 @@ class RunCollection:
         present = [(value, run) for value, run in decorated if value is not missing]
         absent = [run for value, run in decorated if value is missing]
 
-        present.sort(key=lambda pair: pair[0], reverse=reverse)
+        if self._runs and not present:
+            raise LookupError(
+                f"Cannot sort by '{key}': no run in this collection has a "
+                f"parameter or result of that name. "
+                f"`runs[0].parameters` and `.results` list what is available."
+            )
+
+        try:
+            present.sort(key=lambda pair: pair[0], reverse=reverse)
+        except (TypeError, ValueError) as exc:
+            # Mixed types, or values that are not orderable at all (arrays:
+            # numpy returns an array from `<`, which `sort` cannot act on).
+            kinds = sorted({type(value).__name__ for value, _ in present})
+            if len(kinds) > 1:
+                hint = (
+                    f"Sort on something comparable, or coerce them: "
+                    f"sort_by(lambda r: float(r.parameters['{key}']))."
+                )
+            else:
+                hint = (
+                    f"Sort on a number derived from them: "
+                    f"sort_by(lambda r: r.load_parameter('{key}').mean())."
+                )
+            raise TypeError(
+                f"Cannot order runs by '{key}': its values are "
+                f"{' and '.join(kinds)}, which cannot be compared. {hint}"
+            ) from exc
+
         return RunCollection([run for _, run in present] + absent)
 
     def where(

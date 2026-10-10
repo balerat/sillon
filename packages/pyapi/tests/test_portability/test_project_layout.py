@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import CHILD_ENV, release
 from silloncommon import project_config
 from silloncore.project_paths import resolve_engine
 from silloncore.projects import create_project
@@ -52,7 +53,7 @@ def _log(cwd: Path, run_name: str, project_path: str):
         capture_output=True,
         text=True,
         timeout=120,
-        env={**os.environ, "SILLON_IDLE_TIMEOUT": "2.0"},
+        env=CHILD_ENV,
     )
     assert proc.returncode == 0, proc.stderr
 
@@ -62,6 +63,9 @@ def clean():
     for path in (PROJ, BIG):
         shutil.rmtree(path, ignore_errors=True)
     yield
+    # These tests reuse one short path, so the directory must not be removed
+    # while its daemon is still serving it -- see this directory's conftest.
+    release(PROJ)
     for path in (PROJ, BIG):
         shutil.rmtree(path, ignore_errors=True)
 
@@ -157,6 +161,10 @@ def test_a_custom_root_survives_the_project_moving(clean):
 
     moved = CURRENT_PATH / "_pl_moved"
     shutil.rmtree(moved, ignore_errors=True)
+    # A live daemon is still bound to a socket inside PROJ, and a renamed Unix
+    # socket keeps its inode -- so renaming out from under it leaves something
+    # connectable that answers with the old paths.
+    release(PROJ)
     PROJ.rename(moved)
     try:
         assert project_config.resolve_storage_root(moved) == external.resolve()
@@ -182,6 +190,7 @@ def test_logging_first_produces_the_same_shape_as_init(clean):
     _log(PROJ, "r1", ".")
     by_daemon = set(p.name for p in (PROJ / ".sillon").iterdir())
 
+    release(PROJ)
     other = CURRENT_PATH / "_pl_init"
     shutil.rmtree(other, ignore_errors=True)
     try:

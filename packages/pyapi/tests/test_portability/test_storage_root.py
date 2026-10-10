@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import IDLE, release
 from silloncommon import project_config
-from silloncommon.socket_path import get_pidfile_path
 
 CURRENT_PATH = Path(__file__).parent.resolve()
 
@@ -33,8 +33,6 @@ AWAY = CURRENT_PATH / "_moved_elsewhere"
 # A path the stale-root test points a config at; it must not exist, or the
 # root is not stale any more and there is nothing to heal.
 GONE = CURRENT_PATH / "_gone"
-
-IDLE = 2.0  # so the daemon is gone before we move its project out from under it
 
 RUN_SCRIPT = textwrap.dedent(
     """
@@ -62,34 +60,7 @@ def _log_run(project: Path, name: str, degree: int, script: str = RUN_SCRIPT):
         env={**os.environ, "SILLON_IDLE_TIMEOUT": str(IDLE)},
     )
     assert proc.returncode == 0, proc.stderr
-    _wait_for_daemon_to_go(project)
-
-
-def _wait_for_daemon_to_go(project: Path):
-    """A project cannot be moved while its daemon is serving it.
-
-    Daemon endpoint files are process-local and must never travel with a
-    project — a moved AF_UNIX socket keeps its inode, so connecting to it
-    would reach the old daemon, still holding the old path.
-
-    Watched through the pidfile rather than by connecting: a probe connection
-    counts as activity and resets the idle timer, so polling the socket keeps
-    the daemon alive forever.
-    """
-    pid_file = get_pidfile_path(str(project))
-    try:
-        pid = int(pid_file.read_text().strip())
-    except (OSError, ValueError):
-        return  # no daemon was recorded; nothing to wait for
-
-    deadline = time.monotonic() + IDLE + 25
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            return
-        time.sleep(0.25)
-    pytest.fail(f"daemon {pid} for {project} never exited")
+    release(project)
 
 
 def _runs(project: Path):

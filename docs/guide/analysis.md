@@ -97,7 +97,29 @@ best_five = project.query(tags="sweep").sort_by("rmse")[:5]
 ```
 
 Runs missing the sort key sort last, in both directions, so a partially-logged
-run never displaces a real result.
+run never displaces a real result. A key that **no** run has raises instead —
+otherwise a typo would hand you the first five runs you happened to log and let
+you call them the best.
+
+!!! warning "Values sort as what they are"
+    `sort_by` orders the values as Python does, which bites on numbers logged
+    as strings — straight off `sys.argv`, say:
+
+    ```python
+    sp.log_param("degree", sys.argv[1])        # "10"
+    sp.log_param("degree", int(sys.argv[1]))   # 10
+    ```
+
+    `"10" < "9"` is true, so the first spelling sorts `1, 10, 2, 9` and looks
+    broken. Log numbers as numbers; to rescue runs already logged, sort on a
+    conversion:
+
+    ```python
+    runs.sort_by(lambda r: float(r.parameters["degree"]))
+    ```
+
+    Values that cannot be ordered against each other at all — an array, or an
+    `int` in one run and a `str` in another — raise and name the key.
 
 ## Reading a run
 
