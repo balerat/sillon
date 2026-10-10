@@ -6,10 +6,18 @@ Five ideas. Read this once and the rest of the documentation is obvious.
 
 A directory containing a `.sillon/` folder. That is the whole definition — there
 is no registration step, no config to write. The first script that logs
-something creates it.
+something creates it. (`sillon init` exists for when you want to name a project
+before it has runs, or put its heavy data on another disk, but you never have
+to call it.)
+
+Everything *inside* that directory belongs to the project: sillon searches
+upward for the `.sillon/`, like git. So a script in `scripts/sweeps/` and a
+notebook in `analysis/` are both working on the project at the root, and
+projects never nest.
 
 Projects are independent: one database, one set of runs, one place to back up.
-`sillon projects` lists every project on your machine and where it is.
+`sillon projects` lists every project on your machine and where it is, and
+`sillon export` / `sillon import` move runs between them.
 
 ## Run
 

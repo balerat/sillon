@@ -90,27 +90,53 @@ could drive the Unix socket.
 ## Storage layout
 
 ```
-.sillon/
-  config.toml            project id + storage root
+.sillon/                 the project marker; found by searching upward
+  config.toml            project id, project name, storage root
+  staging/               short-lived handoff files for large arrays
+  daemon.log / .pid / .sock / .port / .token / .lock
+
+<storage root>/          `.sillon` unless config.toml says otherwise
   database.sql           SQLite: one row per run + artifact/figure/analysis rows
   glob/<uuid>/glob.hdf5  heavy results, big-array params, analyses, source
   artifact/<uuid>/...    copied result files
   figure/<uuid>/...      logged figures
-  staging/               short-lived handoff files for large arrays
-  daemon.log / .pid / .sock / .lock
+  sources/<sha256>       content-addressed source text behind each code version
 ```
+
+Everything a run owns is keyed by the **run uuid** and everything a code version
+owns is keyed by **content**, which is why an import is a directory copy: see
+`silloncore.bundle`. Artifact and figure rows store a uuid *folder name*, not a
+path, resolved at read time against the run's own directory — so a whole
+`<uuid>/` tree moves with every pointer inside it still valid.
+
+`silloncommon.project_config` is the only place `config.toml` is parsed, shared
+by the client, the daemon and both interfaces. The storage root is recorded
+relative to the project when it is inside it, so a project survives being moved;
+three modules used to parse this file independently and two of them disagreed.
 
 SQLite is opened in WAL mode with `busy_timeout` and `synchronous=NORMAL`, so
 reading a project (a CLI command, a notebook) never blocks the daemon writing to
-it. Indexes exist on `uuid`, `name`, `date`, `status` and the three `run_id`
-foreign keys. Both are applied to existing databases on open, by `migrate_schema`.
+it. Indexes exist on `uuid`, `name`, `date`, `started_at`, `logic_version`,
+`status` and the three `run_id` foreign keys, plus a unique index on `uuid` so a
+run cannot be imported twice. All of it is applied to existing databases on
+open, by `migrate_schema`, which also records a schema version in
+`PRAGMA user_version` and backfills `started_at` from `date`.
+
+### Timestamps
+
+A run records both `date` (`%Y-%m-%d-%H:%M:%S`, naive local, what gets
+displayed) and `started_at` (ISO-8601 with an offset, what gets ordered).
+`select_run_index` carries a precomputed `when` key; everything that sorts or
+bounds by time uses it, because a naive local time cannot order runs from two
+machines.
 
 ## Reading and querying (the engine)
 
 Both the CLI and `sillonlab` go through `silloncore.engine`; neither touches the
 database or the globs directly. Key entry points: `get_run_snapshot`,
 `load_run_result` / `load_run_parameter` / `load_run_analysis`, `export_run` /
-`export_run_report`, `prune_runs` / `delete_run`, and `query_runs`.
+`export_run_report`, `export_bundle` / `import_from` / `scan_and_import`,
+`prune_runs` / `delete_run`, `check_project`, and `query_runs`.
 
 ### Two-phase queries
 
@@ -125,13 +151,38 @@ database or the globs directly. Key entry points: `get_run_snapshot`,
 A run whose stored data has gone missing fails the heavy filter rather than
 aborting the query.
 
+## Moving runs between projects
+
+`silloncore.bundle` owns the bundle format (write, read, inspect) and
+`silloncore.transfer` the import. They are separate because a bundle file and a
+project directory are two *sources* feeding one importer: both implement
+`describe` / `run_uuids` / `read_run` / `copy_run_data` / `copy_sources`, and
+`transfer.import_source` does not know which it was handed.
+
+The rule is union-never-overwrite, keyed on the run uuid. A colliding *name*
+gets the incoming run suffixed — which is load-bearing, not cosmetic: it is what
+keeps names unique within a project, and therefore what lets name-keyed lookups
+go on returning one run. Lineage does not depend on it, because edges are
+followed by uuid.
+
+`insert_imported_run` is the sibling of `insert_simulation`, which cannot be
+reused for this: it is duck-typed on a live `Simulation`, and
+`Simulation.__init__` stamps `date = now()` and mints a name.
+
 ## The project registry
 
 `silloncommon.registry` keeps a machine-wide index of projects
 (`~/.config/sillon/registery.toml`, `%APPDATA%` on Windows) so `sillon projects`
-can find them. Entries are located by resolved project path, so re-initialising
-a project updates its row instead of appending one. Writes take a file lock. The
-registry is an index, not data — deleting it loses nothing.
+can find them. Entries are located by resolved project path **then by project
+id**, so re-initialising a project updates its row and a project that has been
+moved is recognised rather than registered twice — `register_if_moved` runs
+whenever a project is opened. Writes take a file lock. The registry is an index,
+not data — deleting it loses nothing.
+
+`silloncore.projects.create_project` is the one implementation of "make this
+directory a project", shared by `sillon init` and the daemon, so a project that
+comes into existence as a side effect of the first logged run is identical to
+one made deliberately.
 
 ## Known limitations
 
@@ -143,3 +194,13 @@ registry is an index, not data — deleting it loses nothing.
   survivor. Fine into the low thousands of runs.
 - **Blocking commit.** The daemon commits on its event loop, so one large dump
   briefly stalls other clients of the same project.
+- **No shared-filesystem projects.** A `.sillon/` on NFS or SMB cannot be
+  driven from two machines: `AF_UNIX` sockets are not meaningful across a
+  network filesystem, the TCP fallback publishes a bare port with no host, and
+  WAL locking is unreliable there. Bundles are the supported way across
+  machines, and they only ever read and write whole files.
+- **Hashes of in-memory values are not portable.** `get_hash` falls back to
+  `pickle.dumps` for anything that is not a file, and pickle output is not
+  guaranteed stable across Python versions. `sillon trace` may therefore fail
+  to recognise the same value hashed on a different interpreter. Imports are
+  unaffected: they dedup on uuid.

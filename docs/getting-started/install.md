@@ -47,14 +47,19 @@ sillon creates a `.sillon/` folder next to it:
 
 ```
 .sillon/
+  config.toml             the project's name and id
   database.sql            SQLite: one row per run
   glob/<uuid>/glob.hdf5   heavy arrays
   artifact/<uuid>/        files you logged
   figure/<uuid>/          figures you logged
+  sources/<sha256>        the code behind each run
   daemon.log              the background daemon's log
 ```
 
-That folder *is* your project. Copy it, move it, back it up like any other data.
+That folder *is* your project. Back it up like any other data, and `mv` it
+wherever you like — it carries its own identity, so sillon notices the next
+time you use it. To move *runs* rather than the whole directory, see
+[Moving runs between machines](../guide/transfer.md).
 
 Add it to your `.gitignore` — it holds results, not source:
 

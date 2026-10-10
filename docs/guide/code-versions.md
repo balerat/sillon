@@ -98,7 +98,7 @@ A common shape: find the current version, then restrict everything downstream
 to it.
 
 ```python
-versions = project.context()          # or: sillon versions
+current = project.versions()[0]["logic_version"]    # most recently used
 clean = project.query(fields={"logic_version": current})
 best = clean.sort_by("rmse")[:5]
 ```

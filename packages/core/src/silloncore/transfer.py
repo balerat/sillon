@@ -75,8 +75,13 @@ def find_projects(root, skip=()) -> list:
 
     The answer to a history of projects made wherever the script happened to
     be -- including the layouts where a project's data ended up a level above
-    it. Does not descend into a project it has already found, so a `.sillon`
-    inside a project's own data is not mistaken for a second project.
+    it, and the stray nested projects that sillon used to create before a run
+    joined the project containing its path.
+
+    What is *not* a project is anything inside a `.sillon` directory: that
+    holds arbitrary trees -- artifacts are copied in whole, and a logged
+    artifact can perfectly well be a checkout with its own `.sillon/` in it.
+    Those are data, not projects.
 
     Args:
         root (str | Path): The directory to search.
@@ -99,9 +104,11 @@ def find_projects(root, skip=()) -> list:
         project = sillon_dir.parent
         if project in skipped or project == root:
             continue
-        # Already covered by a project above it: `.sillon/glob/...` can hold
-        # anything, and a nested project is not a thing sillon creates.
-        if any(project != other and other in project.parents for other in found):
+        # Inside another project's *storage*, so it is something that was
+        # logged rather than something that was run. A nested project
+        # elsewhere in the tree is real and must still be found: that is
+        # exactly what `--scan` is for after upgrading.
+        if ".sillon" in project.relative_to(root).parts:
             continue
         found.append(project)
 

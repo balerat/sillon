@@ -15,7 +15,7 @@ import sillonpy as sp
         - track_run
         - init
         - force_dump
-        - track
+        - autolog
 
 ## Logging values
 
@@ -25,7 +25,6 @@ import sillonpy as sp
         - log_param
         - log_result
         - log_figure
-        - add_metadata
         - add_metadata
         - add_note
         - add_tag

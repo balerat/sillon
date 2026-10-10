@@ -220,15 +220,45 @@ def test_the_root_itself_counts_as_a_project(tmp_path):
     assert find_projects(tmp_path / "tree") == [(tmp_path / "tree").resolve()]
 
 
-def test_a_project_inside_a_project_is_not_a_second_project(tmp_path):
-    """`.sillon/` holds arbitrary trees; sillon never nests projects."""
+def test_a_project_inside_another_ones_storage_is_data_not_a_project(tmp_path):
+    """`.sillon/` holds arbitrary trees.
+
+    Artifacts are copied in whole, and a logged artifact can perfectly well be
+    a checkout with its own `.sillon/` in it.
+    """
     outer = _project(tmp_path / "tree" / "outer", "Outer", [])
-    # Something that looks like a project, inside the outer one's data.
-    nested = outer / ".sillon" / "glob" / "whatever"
+    nested = outer / ".sillon" / "artifact" / "some-run" / "a-checkout"
     (nested / ".sillon").mkdir(parents=True)
 
     found = find_projects(tmp_path / "tree")
     assert found == [outer.resolve()]
+
+
+def test_a_stray_nested_project_is_found(tmp_path):
+    """What sillon itself used to create, before 2.1.
+
+    A script in `scripts/sweeps/` logging with `project_path="."` made a second
+    project there. Those runs are real, and `--scan` is how they get folded
+    back in -- so a project under another project's *source tree* must be
+    found, even though the one above it is a project too.
+    """
+    outer = _project(tmp_path / "tree" / "shaking", "Shaking", [_row("o-1", "main", 1)])
+    stray = _project(outer / "scripts" / "sweeps", "Stray", [_row("s-1", "stray", 7)])
+
+    found = find_projects(tmp_path / "tree")
+    assert set(found) == {outer.resolve(), stray.resolve()}
+
+
+def test_the_recipe_for_folding_a_stray_project_back_in(tmp_path):
+    """`sillon import --scan .` from the project root, as the docs say."""
+    outer = _project(tmp_path / "shaking", "Shaking", [_row("o-1", "main", 1)])
+    _project(outer / "scripts" / "sweeps", "Stray", [_row("s-1", "stray", 7)])
+
+    engine = resolve_engine(outer)
+    result = scan_and_import(engine, resolve_storage_root(outer), outer, outer)
+
+    assert result["imported"] == 1
+    assert {e["name"] for e in select_run_index(engine)} == {"main", "stray"}
 
 
 def test_the_destination_is_left_out_of_its_own_scan(tmp_path):

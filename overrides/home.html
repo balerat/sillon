@@ -354,10 +354,11 @@ coef <span class="k">=</span> project.<span class="f">get</span>(<span class="s"
     <div class="codepane">
       <div class="code-top"><span>command line</span><span class="tag">bash</span></div>
 <pre><span class="c"># inspect the trail without opening python</span>
-<span class="k">$</span> sillon context              <span class="c"># overview of all runs</span>
+<span class="k">$</span> sillon list                 <span class="c"># overview of all runs</span>
 <span class="k">$</span> sillon show my_fit -p -r    <span class="c"># full run detail</span>
-<span class="k">$</span> sillon compare my_fit my_fit_2   <span class="c"># diff two runs</span>
-<span class="k">$</span> sillon grab my_fit -r coef  <span class="c"># pull a result to disk</span>
+<span class="k">$</span> sillon diff my_fit my_fit_2 <span class="c"># what differs, and whether it was fair</span>
+<span class="k">$</span> sillon fetch my_fit -r coef <span class="c"># pull a result to disk</span>
+<span class="k">$</span> sillon export --dest ~/share  <span class="c"># take the runs to another machine</span>
 <span class="out">Run name   Timestamp             Params   Status
 my_fit     2026-06-01 10:00:00   2        SUCCESS
 my_fit_2   2026-06-02 14:20:00   2        SUCCESS</span></pre>
@@ -392,7 +393,7 @@ my_fit_2   2026-06-02 14:20:00   2        SUCCESS</span></pre>
       <div class="card">
         <div class="ico">$ sillon</div>
         <h3>Inspect</h3>
-        <p>A CLI for the trail — search, show, compare, grab, report, and prune runs from the terminal without writing a line of glue code.</p>
+        <p>A CLI for the trail — query, show, diff, fetch, report and prune runs from the terminal, and export them to another machine, without writing a line of glue code.</p>
       </div>
     </div>
   </div>

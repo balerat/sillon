@@ -244,6 +244,59 @@ See [Provenance](provenance.md).
 
 ---
 
+## Runs in the wrong place
+
+### "I ran this on the laptop and want it on the desktop"
+
+```bash
+sillon export --dest /Volumes/share/          # on the laptop
+sillon import /Volumes/share/Lattice~laptop~20261007T185407Z.sillon
+```
+
+A bundle is a file, so anything that moves files works: a shared drive, `scp`,
+Dropbox, a USB stick. Importing twice does nothing the second time, which is
+how you check whether a bundle has anything new in it. See
+[Moving runs between machines](transfer.md).
+
+### "Just the index — the arrays are gigabytes"
+
+```bash
+sillon export --no-data --dest /Volumes/share/
+```
+
+The runs arrive as records with no data: they show up in `sillon list` and
+`query`, and reading their results fails. `sillon check` lists them.
+
+### "These two projects should have been one"
+
+```bash
+sillon import ../other-project
+```
+
+No bundle needed on one machine. A colliding name gets the incoming run
+suffixed with the project it came from (`deg3~Alpha`); your local run keeps its
+name and its values.
+
+### "I have projects scattered all over my home directory"
+
+```bash
+sillon import --scan ~/Code/phd
+sillon import --scan ~/Code/phd --dry-run     # look first
+```
+
+Finds every project under the tree at any depth, skips this one, and folds them
+all in. This is also how you recover the stray nested projects sillon used to
+create before 2.1 — see [Migrating to 2.1](migrating-to-2.1.md).
+
+### "I moved a project and now `sillon projects` looks wrong"
+
+Run any sillon command inside it. A project carries its own identity, so the
+registry catches up on its own:
+
+```bash
+cd ~/Code/phd/shaking && sillon
+```
+
 ## Housekeeping you might not know about
 
 ### The daemon
@@ -263,6 +316,19 @@ bursts and want it to stay warm.
 with sp.track_run(project_path="/scratch/job-4821"):
     ...
 ```
+
+The path names a *location*; the run joins the project that contains it,
+searching upward. If there is no project above it, one is created there.
+
+### "Is anything wrong with this project?"
+
+```bash
+sillon check
+sillon check --repair     # only the fixes that cannot lose anything
+```
+
+Runs whose data is gone, data no run claims, lineage pointing at runs that are
+not here, a storage root that has moved. `--repair` never touches a run row.
 
 ### Sealing a run early
 

@@ -24,14 +24,42 @@ with sp.track_run():          # fix
 
 ### `Not in a sillon project.`
 
-The CLI needs to be run from a directory containing `.sillon/`. Either `cd`
-there, or find it:
+You are not inside one. The CLI searches **upward** for a `.sillon/` directory,
+so being in a subdirectory is fine — this means no ancestor has one either.
+Either find the project you meant, or make this one:
 
 ```bash
 sillon projects
 ```
 
-(`sillon projects` itself works from anywhere.)
+```bash
+sillon init --name "My Project"
+```
+
+(`sillon projects` and `sillon init` are the two commands that work from
+anywhere.)
+
+### `Cannot open this project: No sillon database found ...`
+
+The project directory is there but its database is not — usually a storage root
+on a disk that is not mounted, or a partial copy. This is what `check` is for,
+and it is the one command that still runs:
+
+```bash
+sillon check
+```
+
+```text
+  broken     the project's database could not be opened, so its runs could not be checked
+  broken     the recorded storage root is not there: /Volumes/bigdisk/sillon
+```
+
+### `Run '<name>' (<uuid>) is not in this project.`
+
+A lineage edge pointing at a run that is not here — normally a child imported
+without its parent. The edge is kept deliberately, because it is still a true
+statement about where the run came from; it just cannot be walked. Import the
+rest of the source, or leave it. `sillon check` lists them all.
 
 ### `Daemon failed to start. Check logs at .../daemon.log`
 
@@ -47,9 +75,10 @@ The daemon could not come up. The log names the cause. Most common:
 
 ### `Result '<name>' ... is recorded in the database but missing from the run's HDF5 store`
 
-The run's row survived but its array store did not — usually a deleted or
-partially copied `.sillon/`. The value is genuinely gone; the error is telling
-you rather than handing back a placeholder.
+The run's row survived but its array store did not — a pruned run, an
+`import --no-data`, or a partially copied `.sillon/`. The value is genuinely
+gone; the error is telling you rather than handing back a placeholder.
+`sillon check` lists every run in this state.
 
 ### `TypeError: Object of type X is not JSON serializable`
 

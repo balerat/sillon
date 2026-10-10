@@ -35,5 +35,4 @@ import sillonlab as sl
       members:
         - Run
         - RunCollection
-        - delete_run
       show_submodules: false

@@ -113,6 +113,13 @@ never element by element.
 **Files remember their run.** Everything is content-hashed, so
 `sillon trace figures/fit.png` tells you which run produced a file you found.
 
+**Runs travel.** `sillon export` writes one file holding everything needed to
+rebuild a set of runs elsewhere — arrays, artifacts, figures, lineage, code
+versions — and `sillon import` adds whatever the project does not already have.
+Union, never overwrite, so importing twice is a no-op and nothing local can be
+lost. On one machine you skip the file entirely: `sillon import ../other-project`,
+or `sillon import --scan ~/Code/phd` to fold in a tree of them.
+
 **It stays out of the way.** Zero configuration, a background daemon you never
 start, and heavy arrays offloaded without you thinking about it.
 
@@ -125,6 +132,8 @@ start, and heavy arrays offloaded without you thinking about it.
 | [Logging runs](docs/guide/logging.md) | the whole logging API |
 | [Querying and analysis](docs/guide/analysis.md) | working with many runs |
 | [Provenance and lineage](docs/guide/provenance.md) | code versions, automatic lineage, figures, hashes |
+| [Moving runs between machines](docs/guide/transfer.md) | bundles, merging projects, the shared drive |
+| [Working with projects](docs/guide/projects.md) | finding, naming, moving them |
 | [CLI reference](docs/reference/cli.md) | every command |
 | [Troubleshooting](docs/guide/troubleshooting.md) | when something breaks |
 

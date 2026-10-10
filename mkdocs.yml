@@ -57,6 +57,7 @@ nav:
       - Moving runs between machines: guide/transfer.md
       - Provenance and lineage: guide/provenance.md
       - Troubleshooting: guide/troubleshooting.md
+      - Migrating to 2.1: guide/migrating-to-2.1.md
       - Migrating to 2.0: guide/migrating-to-2.0.md
   - Reference:
       - Command line: reference/cli.md
