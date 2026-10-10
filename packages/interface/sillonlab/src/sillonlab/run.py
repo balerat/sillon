@@ -426,9 +426,12 @@ class Run:
         return export_run(self.storage_root, self._load_snapshot(), dest, format)
 
     def report(self, dest=None, with_data: bool = False) -> Path:
-        """Exports a self-contained context bundle (zip) describing the run.
+        """Writes the run up as a zip for a person to read.
 
-        The bundle answers "what did this run use and do": a JSON manifest, a
+        Not a *bundle*: this is lossy on purpose and nothing reads it back. To
+        move runs to another project or machine, see `Project.export`.
+
+        The report answers "what did this run use and do": a JSON manifest, a
         readable `report.md`, the recorded entry script, and optionally the
         run's data as HDF5. Ideal to archive a run or drop it in a thesis
         appendix.
@@ -440,7 +443,7 @@ class Run:
                 to False.
 
         Returns:
-            Path: The path of the written zip bundle.
+            Path: The path of the written zip.
         """
         return export_run_report(
             self.engine, self.storage_root, self._load_snapshot(), dest, with_data

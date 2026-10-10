@@ -6,7 +6,8 @@ from silloncore.engine import get_run_snapshot, export_run_report
 def add_parser(command_subparser):
     # -- Parser for the report command -- #
     report_parser = command_subparser.add_parser(
-        "report", help="Export a self-contained context bundle (zip) describing a run."
+        "report",
+        help="Write up one run as a zip for a person to read (see `export` to move runs).",
     )
     report_parser.add_argument(
         "run_name", type=str, help="The name or uuid of the run."
@@ -20,7 +21,7 @@ def add_parser(command_subparser):
     report_parser.add_argument(
         "--with-data",
         action="store_true",
-        help="Also embed the run's results/analyses as HDF5 in the bundle.",
+        help="Also embed the run's results/analyses as HDF5 in the zip.",
     )
 
 
@@ -40,5 +41,5 @@ def command(engine, storage_root, args):
         dest=args.get("dest"),
         with_data=args.get("with_data", False),
     )
-    console.print(f"[bold green]✔[/bold green] Wrote report bundle to [cyan]{path}[/cyan]")
+    console.print(f"[bold green]✔[/bold green] Wrote report to [cyan]{path}[/cyan]")
     return path
