@@ -22,8 +22,10 @@ import silloncli.commands.diff as diff
 import silloncli.commands.like as like
 import silloncli.commands.export as export
 import silloncli.commands.import_cmd as import_cmd
+import silloncli.commands.init as init
 
-from silloncommon import __version__
+from silloncommon import __version__, registry
+from silloncommon.project_config import find_project_root
 
 
 '''
@@ -48,12 +50,20 @@ COMMAND_LIST = {
     "like": like,
     "export": export,
     "import": import_cmd,
+    "init": init,
 }
 
 
 # Commands that answer questions about the machine rather than about one
 # project, and so must work from any directory.
 PROJECT_INDEPENDENT = {"projects"}
+
+
+def _args_without_command(args):
+    """The parsed arguments as a dict, minus the command name itself."""
+    args_dict = vars(args)
+    args_dict.pop("command", None)
+    return args_dict
 
 
 def command_launcher(engine, storage_root, args):
@@ -117,19 +127,36 @@ def cli():
         return
 
     # -- Getting the Path -- #
-    project_dir = Path.cwd()
-    if not (project_dir / ".sillon").exists():
+    # Searched upward, like git: running `sillon list` from `analysis/` should
+    # work, because that is where you are when you want to look something up.
+    project_dir = find_project_root(Path.cwd())
+    if project_dir is None:
         # A bare `sillon` outside a project is still a front door: say what
         # this is and how to find your projects, rather than erroring out.
         if args.command is None:
             print_landing_outside_project(__version__)
             return
-        print("Not in a sillon project. Try `sillon projects` to find them.")
+        if args.command == "init":
+            # `init` is the one command whose whole job is to not be in one.
+            COMMAND_LIST["init"].command(None, None, _args_without_command(args))
+            return
+        print("Not in a sillon project. Try `sillon projects` to find them,")
+        print("or `sillon init` to make this directory one.")
         sys.exit(1)
+
+    if args.command == "init":
+        # Standing inside a project already; `init` reports rather than
+        # layering a second one underneath, which sillon never creates.
+        COMMAND_LIST["init"].command(None, None, _args_without_command(args))
+        return
 
     # -- Getting the engine and storage root (shared with sillonlab) -- #
     engine = resolve_engine(project_dir)
     storage_root = resolve_storage_root(project_dir)
+    # A project carries its identity in its own config, so moving one is
+    # reasonable; it just leaves this machine's registry pointing at where it
+    # used to be. Opening it is the moment we can notice.
+    registry.register_if_moved(project_dir)
 
     # -- Bare `sillon`: the project at a glance -- #
     if args.command is None:

@@ -53,7 +53,17 @@ class Tracker:
         self.run_name = run_name
         if project_path is None:
             project_path = os.getcwd()
-        self.project_path = Path(project_path).resolve()
+        # `project_path` names a location; the run joins the project that
+        # contains it. A script in `scripts/sweeps/` logging with
+        # `project_path="."` belongs to the project at the root -- it used to
+        # create a second one nested inside the first, which sillon does not
+        # otherwise allow and `sillon init` now refuses.
+        #
+        # With no project anywhere above, one is created here, which is what
+        # keeps logging zero-config: a fresh directory still becomes a project
+        # on the first run.
+        requested = Path(project_path).expanduser().resolve()
+        self.project_path = project_config.find_project_root(requested) or requested
         self.project_name = project_name
         self.organisation = organisation
         self.author = author

@@ -8,9 +8,9 @@ Both this and the CLI read the same records from `silloncore.projects`, so they
 never disagree.
 """
 
-from silloncore.projects import find_project, get_projects
+from silloncore.projects import get_projects
 
-from sillonlab.project import Project, load_project
+from sillonlab.project import load_project  # noqa: F401  (re-exported)
 
 
 def list_projects(with_stats: bool = True, include_missing: bool = True) -> list:
@@ -36,33 +36,3 @@ def list_projects(with_stats: bool = True, include_missing: bool = True) -> list
             and when `with_stats`, `run_count`, `last_activity`, `readable`.
     """
     return get_projects(include_missing=include_missing, with_stats=with_stats)
-
-
-def open_project(name_or_path: str) -> Project:
-    """Load a project by its registered name instead of by path.
-
-    Accepts a project name (case-insensitive; a unique prefix is enough) or a
-    path, so the output of `list_projects` can be used directly.
-
-    Example:
-        ```python
-        project = sl.open_project("Shaking Lattice")
-        ```
-
-    Args:
-        name_or_path (str): A registered project name, or a path.
-
-    Raises:
-        LookupError: If nothing matches, or if a name prefix is ambiguous.
-
-    Returns:
-        Project: The loaded project.
-    """
-    record = find_project(name_or_path)
-    if record is None:
-        raise LookupError(
-            f"No registered project matches '{name_or_path}'. "
-            "Use sillonlab.list_projects() to see what is registered "
-            "(a name must be unique, or give the path instead)."
-        )
-    return load_project(record["project_path"])

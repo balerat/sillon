@@ -1,5 +1,6 @@
 from silloncore.engine import get_project_context
 from silloncore.display import print_context
+from silloncli.context import project_root
 from silloncore.project_paths import resolve_project_name
 
 
@@ -20,11 +21,11 @@ def command(engine, storage_root, args):
 
     One run in detail is `sillon show`; this is the many-runs view.
     """
-    from pathlib import Path
 
     data = get_project_context(engine, args.get("run_name", []))
     # The overview shape is the table; the per-run shape is a detail card,
     # which is `show`'s job, so always render the table here.
     data["mode"] = "overview"
-    print_context(data, project_name=resolve_project_name(Path.cwd()))
+    # The project root, not the cwd: the CLI works from subdirectories now.
+    print_context(data, project_name=resolve_project_name(project_root()))
     return data

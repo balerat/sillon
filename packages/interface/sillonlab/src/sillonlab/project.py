@@ -1,6 +1,9 @@
+import os
 from pathlib import Path
 from typing import Optional
 
+from silloncommon import registry
+from silloncommon.project_config import find_project_root
 from silloncore.project_paths import (
     resolve_storage_root,
     resolve_engine,
@@ -66,26 +69,36 @@ class Project:
     def __init__(self, project_path=None) -> None:
         """Loads a sillon project from disk.
 
+        The project containing `project_path` is found by searching upward, so
+        a notebook in `analysis/` opens the project it belongs to rather than
+        failing — which is where you are when you want to look something up.
+
         Args:
-            project_path (str | Path, optional): The project root (the folder
-                containing `.sillon`). Defaults to the current working
-                directory.
+            project_path (str | Path, optional): A path inside the project, or
+                the project root. Defaults to the current working directory.
 
         Raises:
             FileNotFoundError: If no `.sillon` directory or database is found.
         """
-        self.path = Path(project_path or Path.cwd()).expanduser().resolve()
-        self._sillon_dir = self.path / ".sillon"
-        if not self._sillon_dir.exists():
+        start = Path(project_path or Path.cwd()).expanduser().resolve()
+        found = find_project_root(start)
+        if found is None:
             raise FileNotFoundError(
-                f"Not a sillon project: no .sillon directory in {self.path}"
+                f"Not a sillon project: no .sillon directory in {start} "
+                "or any directory above it."
             )
+        self.path = found
+        self._sillon_dir = self.path / ".sillon"
         # Storage-root and engine resolution is shared with the CLI (silloncore).
         self.storage_root = resolve_storage_root(self.path)
         self.engine = resolve_engine(self.path)
         # The project's own name, from its config rather than this machine's
         # registry, so it survives being copied or moved. "" when unset.
         self.name = resolve_project_name(self.path)
+        # A project carries its identity in its own config, so `mv`-ing one is
+        # reasonable; it just leaves this machine's registry pointing at where
+        # it used to be. Opening it is the moment we can notice.
+        registry.register_if_moved(self.path)
 
     # ---------------------------------------------------------
     # Run access
@@ -536,14 +549,55 @@ class Project:
         return f"Project({label} @ {self.path})"
 
 
-def load_project(project_path=None) -> Project:
-    """Loads a sillon project from a path (defaults to the current directory).
+def load_project(name_or_path=None) -> Project:
+    """Loads a sillon project by registered name, or by path.
+
+    With no argument, the project you are inside — searching upward, so a
+    notebook in a subdirectory opens the project it belongs to.
+
+    A name is matched against this machine's registry, case-insensitively and
+    by unique prefix, so the output of `list_projects()` can be used directly.
+    A path wins over a name when both would match.
+
+    Example:
+        ```python
+        sl.load_project()                    # the one I am in
+        sl.load_project("Shaking Lattice")   # by name, from anywhere
+        sl.load_project("~/Code/phd/shaking")
+        ```
 
     Args:
-        project_path (str | Path, optional): The project root containing the
-            `.sillon` directory.
+        name_or_path (str | Path, optional): A registered project name, a path
+            inside a project, or a project root.
+
+    Raises:
+        FileNotFoundError: If a path is given and no project contains it.
+        LookupError: If a name matches nothing, or matches several projects.
 
     Returns:
         Project: The loaded project.
     """
-    return Project(project_path)
+    if name_or_path is None:
+        return Project(None)
+
+    # A path that exists and is (or is inside) a project is unambiguous, so it
+    # takes precedence over the registry -- a project named after a directory
+    # you happen to be standing in must not shadow that directory.
+    candidate = Path(name_or_path).expanduser()
+    if candidate.exists() and find_project_root(candidate) is not None:
+        return Project(candidate)
+
+    from silloncore.projects import find_project
+
+    record = find_project(str(name_or_path))
+    if record is not None:
+        return Project(record["project_path"])
+
+    # Nothing matched. Which error depends on what they seem to have meant.
+    if candidate.exists() or os.sep in str(name_or_path):
+        return Project(candidate)  # raises FileNotFoundError, with the path in it
+    raise LookupError(
+        f"No registered project matches '{name_or_path}'. "
+        "Use sillonlab.list_projects() to see what is registered "
+        "(a name must be unique, or give the path instead)."
+    )

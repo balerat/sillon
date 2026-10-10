@@ -10,9 +10,12 @@ Run `sillon` with no command for the project at a glance — its name, run count
 and health, code versions, storage and whether the daemon is up. Outside a
 project it tells you how to find your projects instead of erroring.
 
-Every command except `projects` must be run from inside a project (a directory
-containing `.sillon/`). Runs can be named by **name, full uuid, or an unambiguous
-uuid prefix** — `sillon show a3f9` works.
+Every command except `projects` and `init` must be run from inside a project.
+"Inside" means what it means in git: the project is found by searching **upward**
+for a `.sillon/` directory, so `sillon list` works from `analysis/figures/`.
+
+Runs can be named by **name, full uuid, or an unambiguous uuid prefix** —
+`sillon show a3f9` works.
 
 !!! warning "Renamed in 2.0"
     `context` → `list`, `search` → `query`, `grab` → `fetch`, `whose` → `trace`,
@@ -93,6 +96,29 @@ does. See [Code versions](../guide/provenance.md#code-versions).
 |---|---|
 | `--backfill` | Recover versions for older runs from their stored entry script. Those cover the entry script only and are shown as such. |
 | `--files` | Per-file hashes (implied when you name a version). |
+
+### `sillon init` — make a directory a project
+
+```bash
+sillon init
+sillon init --name "Shaking Lattice"
+sillon init --storage-root /Volumes/bigdisk/sillon    # heavy data elsewhere
+sillon init ~/Code/phd/new-thing                      # somewhere else
+```
+
+Logging a run has always created the project it needs, and still does — that is
+the point of sillon, and `init` is not required. What `init` adds is the two
+things that side effect cannot do: name a project before it has any runs, and
+put its heavy data somewhere other than `.sillon/`.
+
+| Flag | Effect |
+|---|---|
+| `--name NAME` | The project's name. Without it the first run that passes `project_name` sets it. |
+| `--storage-root PATH` | Where `glob/`, `artifact/`, `figure/` and the database live. Recorded relative to the project when it is inside it, so the project still travels. |
+
+Running it on an existing project reports and changes nothing — it will not
+rename a project or move its data. Running it *inside* one is refused: sillon
+does not nest projects.
 
 ### `sillon projects` — every project on this machine
 

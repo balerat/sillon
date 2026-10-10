@@ -17,7 +17,7 @@ Example:
 """
 
 from sillonlab.project import Project, load_project
-from sillonlab.projects import list_projects, open_project
+from sillonlab.projects import list_projects
 from silloncommon.access_log import clear as _clear_reads, reads as _reads
 from sillonlab.run import Run, RunCollection
 
@@ -57,7 +57,6 @@ def pending_reads() -> list:
 __all__ = [
     "Project",
     "load_project",
-    "open_project",
     "list_projects",
     "Run",
     "RunCollection",

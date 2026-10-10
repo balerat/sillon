@@ -13,7 +13,6 @@ import sillonlab as sl
     options:
       members:
         - list_projects
-        - open_project
 
 ::: sillonlab
     options:

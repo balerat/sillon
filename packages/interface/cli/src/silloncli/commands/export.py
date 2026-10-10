@@ -68,8 +68,7 @@ def _pairs(raw):
 
 def command(engine, storage_root, args):
     """CLI Export Command Handler"""
-    from pathlib import Path
-
+    from silloncli.context import project_root
     from silloncore.engine import export_bundle
 
     filters = {}
@@ -90,7 +89,7 @@ def command(engine, storage_root, args):
         result = export_bundle(
             engine,
             storage_root,
-            Path.cwd(),
+            project_root(),
             run_names=args.get("run_name") or None,
             dest=args.get("dest"),
             with_data=not args.get("no_data"),

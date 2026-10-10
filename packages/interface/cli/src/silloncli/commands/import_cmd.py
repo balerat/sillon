@@ -1,7 +1,6 @@
 """`sillon import` — the module is `import_cmd` because `import` is a keyword."""
 
-from pathlib import Path
-
+from silloncli.context import project_root
 from silloncore.bundle import BundleError
 from silloncore.display import (
     console,
@@ -61,7 +60,7 @@ def command(engine, storage_root, args):
             result = scan_and_import(
                 engine,
                 storage_root,
-                Path.cwd(),
+                project_root(),
                 args["source"],
                 with_data=with_data,
                 dry_run=dry_run,

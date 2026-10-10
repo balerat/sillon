@@ -24,6 +24,7 @@ import toml
 __all__ = [
     "SILLON_DIR",
     "config_path",
+    "find_project_root",
     "read_config",
     "write_config",
     "resolve_storage_root",
@@ -122,3 +123,27 @@ def project_id(project_path) -> str:
 def project_name(project_path) -> str:
     """The project's own name, as recorded in its config. `""` when unset."""
     return (read_config(project_path).get("Environment") or {}).get("project_name") or ""
+
+
+def find_project_root(start=None):
+    """The project a path is inside, searching upward. None if there is none.
+
+    Like git: standing in `analysis/figures/` should work, because that is
+    where you are when you want to look something up. Stops at the filesystem
+    root, and at a mount point only in the sense that it will keep walking --
+    a project above a mount is still your project.
+
+    Args:
+        start (str | Path, optional): Where to start. Defaults to the current
+            directory.
+
+    Returns:
+        Path | None: The project root, or None if no ancestor has `.sillon/`.
+    """
+    current = Path(start or Path.cwd()).expanduser().resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / SILLON_DIR).is_dir():
+            return candidate
+    return None

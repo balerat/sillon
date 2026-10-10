@@ -18,7 +18,7 @@ you do not remember where the project is. `--prune` forgets ones whose folder is
 gone.
 
 ```python
-sl.open_project("Shaking Lattice")    # by name, a unique prefix is enough
+sl.load_project("Shaking Lattice")    # by name, a unique prefix is enough
 ```
 
 ### "Which runs used degree 3?"

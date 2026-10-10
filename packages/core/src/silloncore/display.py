@@ -383,6 +383,7 @@ __all__ = [
     "print_import_plan",
     "print_import_result",
     "print_scan_result",
+    "print_init_result",
     "Columns",
     "Group",
     "Text",
@@ -1030,4 +1031,37 @@ def print_scan_result(result: dict) -> None:
 
     console.print(
         themed_panel(Group(*body), title="Scanned" if not result["dry_run"] else "Would scan")
+    )
+
+
+def print_init_result(result: dict) -> None:
+    """Prints a `silloncore.projects.create_project` payload."""
+    created = result["created"]
+    lines = [
+        Text.assemble(
+            ("  project  ", S_LABEL),
+            (result["project_name"] or "(unnamed)", f"bold {c('foam')}"),
+        ),
+        Text.assemble(("  path     ", S_LABEL), (str(result["path"]), S_DIM)),
+        Text.assemble(("  storage  ", S_LABEL), (str(result["storage_root"]), S_DIM)),
+    ]
+    if not result["project_name"]:
+        lines.append(
+            Text.assemble(
+                ("  note     ", S_LABEL),
+                ("no name yet — the first run that passes project_name sets it",
+                 f"italic {c('slate')}"),
+            )
+        )
+    if not created:
+        lines.append(
+            Text.assemble(
+                ("  note     ", S_LABEL),
+                ("already a project; nothing was changed", f"italic {c('ember')}"),
+            )
+        )
+    console.print(
+        themed_panel(
+            Group(*lines), title="Initialised" if created else "Already a project"
+        )
     )

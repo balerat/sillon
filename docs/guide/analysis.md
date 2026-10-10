@@ -12,10 +12,10 @@ import sillonlab as sl
 ```python
 project = sl.load_project()             # the current directory
 project = sl.load_project("~/work/sweep")
-project = sl.open_project("Shaking Lattice")   # by registered name
+project = sl.load_project("Shaking Lattice")   # by registered name
 ```
 
-`open_project` accepts a name from `sl.list_projects()` (a unique prefix is
+`load_project` accepts a name from `sl.list_projects()` (a unique prefix is
 enough), so you do not have to remember paths. See [Projects](projects.md).
 
 ## Looking around

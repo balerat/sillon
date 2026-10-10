@@ -880,7 +880,7 @@ def test_public_surface_is_the_2_0_one():
         assert not hasattr(sp, gone), f"{gone} should have been removed in 2.0"
 
     assert set(sl.__all__) == {
-        "Project", "load_project", "open_project", "list_projects",
+        "Project", "load_project", "list_projects",
         "Run", "RunCollection", "forget_reads", "pending_reads",
     }
     assert not hasattr(sl, "delete_run")

@@ -9,6 +9,7 @@ import toml
 from sqlmodel import SQLModel, Session
 
 from silloncommon.database import insert_simulation, create_default_engine_root
+from silloncore.projects import create_project
 from silloncommon import project_config, registry
 from .glob import Glob, get_hash
 
@@ -44,130 +45,54 @@ class ProjectEnvironmentHandler:
         Args:
             project_name (str): The name of the project.
             project_path (str | Path): The directory path where the project resides.
+            project_storage_root (str | Path, optional): Where heavy data
+                should live, for a project being created here.
         """
-        self._project_path = pathlib.Path(project_path)
-        self._create_sillon_dir()
-        self._project_name = project_name or ""
-        self._generate_default_config(project_storage_root)
-        self._load_config_file()
-        os.makedirs(self._storage_root, exist_ok=True)
-        self._create_sql_engine()
-        self._raise_permission_sill()
-        self._add_project()
-        
-
-    def _generate_default_config(self, project_storage_root):
-        """Creates a default configuration dictionary for a sillon project.
-
-        Args:
-            project_name (str): The name of the project.
-            project_uuid (str): The universally unique identifier for the project.
-
-        Returns:
-            dict: A dictionary containing the basic configuration keys `project_name` 
-                and `project_uuid`.
-        """
-        self._project_id = uuid.uuid4()  # Will be set or loaded in init_environment
-        self._config = {}
-        if project_storage_root:
-            self._storage_root = Path(project_storage_root) / "sillon-storage" / f"{self._project_id}"
-        else:
-            self._storage_root = self._sillon_dir
-        self._config["Environment"] = {
-            "project_id": str(self._project_id),
-            # The name belongs to the project, not to this machine's registry.
-            # Kept here too so a copied or moved project keeps its identity.
-            "project_name": self._project_name or "",
-        }
-        # Relative when the root is inside the project, so moving or copying
-        # the project does not leave the daemon writing to the old path.
-        self._config["storage"] = {
-            "storage_root": project_config.store_storage_root(
-                self._project_path, self._storage_root
-            )
-        }
-
-    def _create_sillon_dir(self):
+        self._project_path = pathlib.Path(project_path).expanduser().resolve()
+        # The directory, config, database and registry entry come from the one
+        # shared implementation, so a project the daemon brings into existence
+        # is identical to one `sillon init` made. This is what keeps
+        # zero-config logging working: the first run still creates the project.
+        info = create_project(
+            self._project_path,
+            project_name=project_name,
+            storage_root=project_storage_root,
+        )
+        self._project_id = info["project_id"]
+        self._project_name = info["project_name"]
+        self._storage_root = info["storage_root"]
         self._sillon_dir = self._project_path / ".sillon"
-        os.makedirs(self._sillon_dir, exist_ok=True)
-
-    def _load_config_file(self):
         self._config_path = self._sillon_dir / "config.toml"
-        if not self._config_path.exists():
-            print("creating config at ", self._config_path)
-            with open(self._config_path, "w", encoding="utf-8") as f:
-                toml.dump(self._config, f)
-        else:
-            with open(self._config_path, "r", encoding="utf-8") as f:
-                self._config = toml.load(f)
-                self._project_id = self._config["Environment"]["project_id"]
-            # Through the shared resolver, so the daemon writes where the
-            # readers look. It also rewrites a stale absolute root -- a
-            # project moved while its data lived on another disk -- back to
-            # `.sillon` rather than recreating the old path here.
-            self._storage_root = project_config.resolve_storage_root(self._project_path)
-            recorded_root = (self._config.get("storage") or {}).get("storage_root")
-            canonical_root = project_config.store_storage_root(
-                self._project_path, self._storage_root
-            )
-            if recorded_root != canonical_root:
-                self._config.setdefault("storage", {})["storage_root"] = canonical_root
-                with open(self._config_path, "w", encoding="utf-8") as f:
-                    toml.dump(self._config, f)
+        self._learn_project_name(project_name)
+        self._create_sql_engine()
 
-            # A project created before the name was stored here, or one whose
-            # first run had no project_name, learns it from the first run that
-            # does. Written back so later readers find it.
-            recorded = self._config["Environment"].get("project_name") or ""
-            if self._project_name and self._project_name != recorded:
-                self._config["Environment"]["project_name"] = self._project_name
-                with open(self._config_path, "w", encoding="utf-8") as f:
-                    toml.dump(self._config, f)
-            elif recorded:
-                self._project_name = recorded
+    def _learn_project_name(self, project_name):
+        """Record a name supplied by a run when the project had none.
 
-    def _raise_permission_sill(self):
-        # POSIX-only: Windows' os.chmod honours nothing but the read-only bit,
-        # so every flag below would be silently discarded there.
-        if os.name != "posix":
+        A project created by `sp.init()` with no `project_name=`, and then run
+        again with one, should pick it up -- the alternative is a project that
+        stays nameless forever because of how its first run was written.
+        """
+        if not project_name or self._project_name:
             return
-
-        # 0o775 adds Write/Execute permissions for the owner and group
-        os.chmod(
-            self._sillon_dir,
-            os.stat(self._db_path).st_mode
-            | stat.S_IWUSR
-            | stat.S_IXUSR
-            | stat.S_IWGRP
-            | stat.S_IXGRP,
-        )
-        # Ensure the file itself is writable
-        os.chmod(
-            self._db_path, os.stat(self._db_path).st_mode | stat.S_IWUSR | stat.S_IWGRP
-        )
+        config = project_config.read_config(self._project_path)
+        config.setdefault("Environment", {})["project_name"] = project_name
+        project_config.write_config(self._project_path, config)
+        self._project_name = project_name
+        try:
+            registry.upsert(
+                self._project_id, self._project_path, project_name,
+                self._sillon_dir, self._storage_root,
+            )
+        except Exception:
+            pass
+        
 
     def _create_sql_engine(self):
         self._engine = create_default_engine_root(self._storage_root)
         SQLModel.metadata.create_all(self._engine)
         self._sql_session = Session(self._engine)
         self._db_path = self._storage_root / Path("database.sql")
-
-    def _add_project(self):
-        """Record this project in the machine-wide registry.
-
-        Never fatal: the registry is a convenience index for finding projects
-        later, so a failure to write it must not lose the run being logged.
-        """
-        try:
-            registry.upsert(
-                project_id=self._project_id,
-                project_path=self._project_path,
-                project_name=self._project_name,
-                sillon_dir=self._sillon_dir,
-                storage_root=self._storage_root,
-            )
-        except Exception:
-            pass
 
     def get_config(self):
         """Retrieves the current project configuration.
