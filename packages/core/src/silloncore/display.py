@@ -384,6 +384,7 @@ __all__ = [
     "print_import_result",
     "print_scan_result",
     "print_init_result",
+    "print_check_result",
     "Columns",
     "Group",
     "Text",
@@ -1064,4 +1065,79 @@ def print_init_result(result: dict) -> None:
         themed_panel(
             Group(*lines), title="Initialised" if created else "Already a project"
         )
+    )
+
+
+# A severity's colour and label. `broken` is already failing, `stale` will
+# mislead, `tidy` is only wasted space.
+_SEVERITY_STYLE = {
+    "broken": ("bold #E06C75", "broken"),
+    "stale": ("bold #E5C07B", "stale"),
+    "tidy": ("", "tidy"),
+}
+
+
+def print_check_result(result: dict) -> None:
+    """Prints a `silloncore.check.check_project` or `repair_project` payload."""
+    repaired = result.get("repaired")
+    findings = result.get("remaining") if repaired is not None else result["findings"]
+
+    if not findings and not repaired:
+        console.print(
+            themed_panel(
+                Group(
+                    Text.assemble(
+                        ("  ✔  ", f"bold {c('foam')}"),
+                        (f"{result['run_count']} run(s), nothing out of place", S_VALUE),
+                    ),
+                    Text.assemble(("     ", ""), (result["project"], S_DIM)),
+                ),
+                title="Checked",
+            )
+        )
+        return
+
+    body = []
+    if repaired:
+        body.append(
+            Text.assemble(
+                ("  repaired ", S_LABEL),
+                (f"{len(repaired)} finding(s)", f"bold {c('foam')}"),
+                (f"   {human_size(result['freed_bytes'])} freed", S_DIM)
+                if result.get("freed_bytes")
+                else ("", ""),
+            )
+        )
+        body.append(Text(""))
+
+    if findings:
+        table = themed_table(padding=(0, 2))
+        table.add_column("", justify="left", style=S_DIM)
+        table.add_column("What", style=S_VALUE, overflow="fold", ratio=1)
+        for finding in findings:
+            style, label = _SEVERITY_STYLE.get(finding["severity"], ("", "?"))
+            table.add_row(Text(label, style=style), finding["message"])
+        body.extend([table, Text("")])
+
+        actionable = [f for f in findings if f["repairable"]]
+        if actionable:
+            body.append(
+                Text.assemble(
+                    ("  ", ""),
+                    (f"{len(actionable)} of these can be fixed with ", S_DIM),
+                    ("sillon check --repair", f"bold {c('foam')}"),
+                )
+            )
+        else:
+            body.append(
+                Text(
+                    "  nothing here can be fixed automatically — each needs a decision",
+                    style=S_DIM,
+                )
+            )
+    else:
+        body.append(Text("  nothing left to report", style=S_DIM))
+
+    console.print(
+        themed_panel(Group(*body), title="Repaired" if repaired else "Checked")
     )

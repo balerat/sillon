@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from silloncore.check import check_project as engine_check, repair_project as engine_repair
 from silloncommon import registry
 from silloncommon.project_config import find_project_root
 from silloncore.project_paths import (
@@ -528,6 +529,41 @@ class Project:
             self.engine, self.storage_root, self.path, root,
             with_data=with_data, dry_run=dry_run,
         )
+
+    # ---------------------------------------------------------
+    # Health
+    # ---------------------------------------------------------
+
+    def check(self) -> dict:
+        """Everything in the project that no longer adds up.
+
+        Runs whose data is gone, data no run claims, lineage pointing at runs
+        that are not here, source blobs referenced but not stored, a storage
+        root that has moved, a registry entry that disagrees.
+
+        Example:
+            ```python
+            for finding in project.check()["findings"]:
+                print(finding["severity"], finding["message"])
+            ```
+
+        Returns:
+            dict: `{"project", "run_count", "findings", "counts", "healthy"}`.
+        """
+        return engine_check(self.engine, self.storage_root, self.path)
+
+    def repair(self) -> dict:
+        """Applies the fixes from `check()` that cannot lose anything.
+
+        Re-registers the project, and deletes data and source blobs no run
+        refers to. Never touches a run row: anything whose fix is a judgement
+        call is reported and left alone.
+
+        Returns:
+            dict: The check result, plus `{"repaired", "freed_bytes",
+                "remaining"}`.
+        """
+        return engine_repair(self.engine, self.storage_root, self.path)
 
     # ---------------------------------------------------------
     # Container protocol

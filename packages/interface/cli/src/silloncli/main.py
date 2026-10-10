@@ -23,6 +23,7 @@ import silloncli.commands.like as like
 import silloncli.commands.export as export
 import silloncli.commands.import_cmd as import_cmd
 import silloncli.commands.init as init
+import silloncli.commands.check as check
 
 from silloncommon import __version__, registry
 from silloncommon.project_config import find_project_root
@@ -51,6 +52,7 @@ COMMAND_LIST = {
     "export": export,
     "import": import_cmd,
     "init": init,
+    "check": check,
 }
 
 
@@ -151,8 +153,18 @@ def cli():
         return
 
     # -- Getting the engine and storage root (shared with sillonlab) -- #
-    engine = resolve_engine(project_dir)
     storage_root = resolve_storage_root(project_dir)
+    try:
+        engine = resolve_engine(project_dir)
+    except FileNotFoundError as exc:
+        # `check` is the command you reach for when a project will not open,
+        # so it must not require the project to open. Everything else says
+        # what happened and points at it.
+        if args.command != "check":
+            print(f"Cannot open this project: {exc}")
+            print("Try `sillon check` to find out what is wrong.")
+            sys.exit(1)
+        engine = None
     # A project carries its identity in its own config, so moving one is
     # reasonable; it just leaves this machine's registry pointing at where it
     # used to be. Opening it is the moment we can notice.

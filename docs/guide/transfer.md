@@ -214,6 +214,24 @@ hash of its contents.
 A bundle records the format version it was written with, and a sillon that does
 not understand it refuses to read it rather than importing half of it.
 
+## Checking afterwards
+
+An import can leave two things worth knowing about, both deliberate:
+
+```bash
+sillon check
+```
+
+```text
+  stale     refined's parent deg3 is not in this project
+  stale     deg5 has no glob data on disk
+```
+
+The first is a lineage edge whose other end was never imported — kept, because
+it is still true, but not walkable. The second is a stub, from `--no-data`.
+Neither is fixed automatically, because the fix is a decision: import the rest
+of the bundle, or accept the gap. See [`sillon check`](../reference/cli.md#sillon-check-what-no-longer-adds-up).
+
 ## Limits worth knowing
 
 - **Content-hash matching across machines is unreliable.** `sillon trace`

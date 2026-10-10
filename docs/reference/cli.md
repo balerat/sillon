@@ -372,6 +372,41 @@ Prune refuses to run without a scope: you must give `--run-id` or `--older-than`
 
 ---
 
+## Health
+
+### `sillon check` — what no longer adds up
+
+```bash
+sillon check
+sillon check --repair      # apply the fixes that cannot lose anything
+```
+
+Most of what sillon records is a cross-reference, and each one can come apart:
+a pruned run, a half-finished copy, a child imported without its parent, a
+project moved while its data was on a disk that is not here. None of it is
+fatal, and all of it is confusing when you first meet it as a failed read six
+months later.
+
+Findings come in three severities, worst first:
+
+| | Meaning | Examples |
+|---|---|---|
+| `broken` | already failing | two runs sharing a uuid; a storage root that is not there; a database that will not open |
+| `stale` | will mislead | a run whose data is gone; a lineage edge pointing at a run that is not here; a source a code version refers to but that is not stored |
+| `tidy` | wasted space | data no run claims; stored source text no run refers to |
+
+`--repair` applies only the findings it cannot be wrong about in a costly way:
+re-registering the project, and deleting data and source blobs that no run row
+refers to. **It never touches a run row.** Anything whose fix is a judgement
+call — a run whose data is gone might want re-running or might want deleting —
+is reported and left for you.
+
+It is also the one command that works on a project which will not open: if the
+database cannot be read, that is the first finding rather than the reason you
+cannot ask.
+
+---
+
 ## Environment variables
 
 | Variable | Effect |
